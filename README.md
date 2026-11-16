@@ -38,6 +38,7 @@
 ## 앱 기능
 
 책 추가(표지 사진, EXIF 촬영일로 시작일 자동 입력) · 상태(읽는 중/완독/읽고 싶음) · 별점 · 메모 ·
+**📸 책 사진첩**(기억하고 싶은 구절을 사진으로 찍어 책마다 모아 두기 — 사진별 페이지·메모, 크게 보기, 넘기기, 지우기) ·
 검색·필터·정렬 · 통계 · JSON/CSV 내보내기·가져오기 · 제목으로 표지 정보 찾기(Gemini API 키는 선택,
 기기 저장소에만 보관되고 내보내기 파일에는 포함되지 않음)
 
@@ -52,6 +53,20 @@
 - **Gemini API 키는 절대 공유되지 않습니다.** 키는 `pickle_book_tracker_gemini_key` 로 각 기기의
   localStorage 에만 있고, Firestore 로 보내는 문서에는 들어가지 않습니다.
 - 사진은 Firestore 문서 한도(1MB)에 맞게 필요하면 자동으로 다시 줄여 올립니다. 아주 큰 사진은 공유본에서 빠집니다.
+- **책 사진첩(`gallery`)** 도 함께 공유됩니다. 문서 한도를 넘으면 사진첩 사진을 다시 줄이고, 아주 작게 줄여야 하는 사진은 공유본에서 빼며, 몇 장이 빠졌는지 알려 줍니다.
+  단, `firebase/firestore.rules` 에 `gallery` 항목이 들어간 규칙이 **게시되어 있어야** 합니다.
+  게시 전에는 사진첩만 이 기기에 남고, 글자·표지 공유는 그대로 됩니다(앱이 알아서 사진첩을 뺀 문서로 다시 써요). 게시 방법은 아래를 보세요.
+
+### 사진첩 공유를 켜려면 (Firestore 규칙 게시)
+
+`firebase/firestore.rules` 의 `isValidBook` 에 `gallery` 항목 검사가 들어가 있습니다.
+Firebase 콘솔(**jaeyeon-life** → Firestore → 규칙)에 이 파일 내용을 그대로 붙여 넣고 **게시**하거나,
+
+```bash
+firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어 있을 때
+```
+
+게시하면 사진첩 사진도 함께 공유되고, ‘백업·관리’ 화면의 경고도 사라집니다.
 
 ## 📅 우리들의 캘린더
 
@@ -64,9 +79,12 @@
 ## 갱신 방법
 
 ```bash
-cp ../book-tracker/book_tracker_app.html index.html   # 앱 수정 후
+python3 sync_from_source.py          # ../book-tracker/book_tracker_app.html → index.html (PWA 머리말 유지)
 cp ../shared-calendar/index.html calendar/index.html  # 캘린더 수정 후
 git add -A && git commit -m "앱 갱신" && git push
 ```
+
+> `index.html` 을 `cp` 로 통째로 덮어쓰면 `manifest`·아이콘 같은 PWA 머리말이 사라집니다.
+> 그래서 `sync_from_source.py` 로 옮깁니다.
 
 GitHub Pages 는 `main` 브랜치 루트를 그대로 서빙하며, push 후 1분 안에 반영됩니다.

@@ -783,6 +783,108 @@
 
   .photo-busy { font-size: 11.5px; font-weight: 800; color: var(--accent-2); text-align: center; }
 
+  /* ---------- 📸 책 사진첩 (구절 사진) ---------- */
+  .album-row { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  .album-row .btn, .album-row label.btn { flex: 1 1 auto; cursor: pointer; }
+
+  .album-empty {
+    margin-top: 10px;
+    padding: 18px 14px;
+    border: 1px dashed #E0D2C0;
+    border-radius: 14px;
+    background: #FBF5EE;
+    color: var(--ink-3);
+    font-size: 12.5px;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  .album-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .album-grid:empty { display: none; }
+
+  .album-item {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(180, 150, 120, .28);
+    border-radius: 14px;
+    background: #FFFDFB;
+  }
+
+  .album-shot {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: #F3ECE2;
+    cursor: zoom-in;
+    transition: transform .12s ease;
+  }
+
+  .album-shot img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: #F3ECE2; }
+
+  .album-shot:active { transform: scale(.98); }
+
+  .album-del {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(24, 18, 12, .62);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .album-note {
+    display: block;
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 9px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    background: #FFFDFB;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .album-note::placeholder { color: #B6AB9F; }
+  .album-note:focus { outline: none; background: #FFF6EA; }
+
+  .album-meta.warn { color: var(--danger); font-weight: 600; }
+
+  /* 책장 카드의 사진첩 표시 */
+  .card-album { margin-top: 9px; }
+
+  .album-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid rgba(180, 150, 120, .32);
+    border-radius: 999px;
+    background: #FFF6EA;
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 800;
+  }
+
+  .album-badge:active { transform: scale(.96); }
+
   /* 사진 촬영일 · AI 표지 인식 안내 줄 */
   .photo-ai {
     display: flex;
@@ -859,14 +961,54 @@
     align-items: center;
     justify-content: center;
     gap: 14px;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 24px 22px calc(24px + env(safe-area-inset-bottom, 0px));
     background: rgba(24, 18, 12, .9);
     animation: fadeIn .16s ease-out;
   }
 
+  .pv-stage { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; }
+
+  .pv-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, .3);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .16);
+    color: #fff;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .pv-prev { left: -6px; }
+  .pv-next { right: -6px; }
+
+  .photo-view .pv-count {
+    margin: 0;
+    min-height: 0;
+    color: rgba(255, 255, 255, .66);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .06em;
+  }
+
+  .photo-view .pv-note {
+    color: rgba(255, 255, 255, .95);
+    font-size: 13.5px;
+    font-weight: 700;
+  }
+
+  .photo-view .pv-note:empty { display: none; }
+
   .photo-view img {
     max-width: 100%;
-    max-height: 72vh;
+    max-height: 64vh;
     border-radius: 14px;
     box-shadow: 0 22px 50px -18px rgba(0, 0, 0, .85);
     background: #F3ECE2;
@@ -1078,6 +1220,17 @@
         <textarea id="f-memo" class="textarea" placeholder="짧은 감상 한 줄"></textarea>
       </div>
 
+      <div class="field" id="album-field">
+        <label id="album-label">📸 책 사진첩 <span class="opt">구절·메모 사진</span></label>
+        <div class="album-row">
+          <label class="btn sm" id="gallery-pick" for="f-gallery">📷 사진 추가</label>
+          <input id="f-gallery" class="file-input" type="file" accept="image/*" multiple>
+        </div>
+        <div class="album-empty" id="album-empty">아직 담은 사진이 없어요.<br>기억에 남는 구절을 찍어 책마다 모아 둘 수 있어요.</div>
+        <div class="album-grid" id="album-grid" aria-labelledby="album-label"></div>
+        <p class="photo-meta album-meta" id="album-meta" aria-live="polite"></p>
+      </div>
+
     </form>
   </div>
   <div class="sheet-foot">
@@ -1097,8 +1250,14 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div id="photo-view" class="photo-view hidden" role="dialog" aria-modal="true" aria-label="사진 크게 보기">
-  <img id="photo-view-img" alt="">
+  <div class="pv-stage">
+    <img id="photo-view-img" alt="">
+    <button type="button" class="pv-nav pv-prev hidden" id="photo-view-prev" aria-label="이전 사진">‹</button>
+    <button type="button" class="pv-nav pv-next hidden" id="photo-view-next" aria-label="다음 사진">›</button>
+  </div>
   <p class="cap" id="photo-view-cap"></p>
+  <p class="cap pv-note" id="photo-view-note"></p>
+  <p class="pv-count" id="photo-view-count"></p>
   <button type="button" class="btn" id="photo-view-close">닫기</button>
 </div>
 
@@ -1108,11 +1267,13 @@
    - book-tracker/book_tracker.py 와 같은 JSON 구조를 씁니다.
      { "version": 1, "last_id": N,
        "books": [{ "id", "title", "author", "status", "date", "rating", "tags", "memo",
-                   "started_at", "photo" }] }
+                   "started_at", "photo", "gallery" }] }
      date 는 독서 완료일, started_at 은 독서 시작일(선택)입니다.
-     started_at · photo 는 값이 있는 책에만 붙는 선택 항목입니다 (없는 책은 예전과 같은 모양).
+     started_at · photo · gallery 는 값이 있는 책에만 붙는 선택 항목입니다 (없는 책은 예전과 같은 모양).
+     gallery 는 책 사진첩(구절 사진)으로 [{ id, dataUrl, note?, addedAt }] 입니다.
    - 기록은 이 브라우저(localStorage)에만 저장됩니다. 서버로 보내지 않습니다.
    - 사진은 휴대폰 안에서 <canvas> 로 줄여(긴 변 600px, JPEG) 저장합니다.
+     사진첩 사진은 글씨가 읽리도록 더 크게(긴 변 1000px, JPEG 0.78) 줄여 저장합니다.
      줄이기 전에 원본 JPEG 의 EXIF 를 읽어 촬영일(없으면 넣은 날)을 독서 시작일 칸에 넣습니다.
    - Gemini API 키를 넣으면 사진에서 표지 제목·저자를 읽어 채웁니다.
      이때는 저장용 사본과 별개로 긴 변 1200px 사본을 그 자리에서 한 장 더 만들어
@@ -1145,8 +1306,11 @@
   var FIREBASE_VERSION = '10.14.1';
   var SHARE_COLLECTION = 'bookshelves';
   var SHARE_ROOM_KEY = 'pickle_book_tracker_share_room';
-  /* Firestore 문서 한도는 1MB 입니다. 사진 몫을 700KB 아래로 맞춥니다. */
+  /* Firestore 문서 한도는 1MB 입니다. 글자·표지·사진첩을 합쳐 이 안으로 맞춥니다. */
   var SHARE_PHOTO_MAX_CHARS = 700000;
+  var SHARE_DOC_MAX_CHARS = 880000;
+  /* 공유본 사진첩 사진 한 장의 최소 크기. 이보다 줄여야 하면 구절 글씨를 못 읽으므로 뻔다. */
+  var SHARE_GALLERY_MIN_CHARS = 40000;
 
   var STATUSES = ['완독', '읽는 중', '읽고 싶음'];
   var FILTERS = ['전체', '완독', '읽는 중', '읽고 싶음'];
@@ -1460,6 +1624,120 @@
     if (!kb) return '0KB';
     if (kb >= 1024) return (Math.round(kb / 102.4) / 10) + 'MB';
     return Math.round(kb) + 'KB';
+  }
+
+  /* ------------------------------------------------------------------
+     📸 책 사진첩 — 기억하고 싶은 구절을 사진으로 남깁니다
+     - 책마다 gallery: [{ id, dataUrl, note, addedAt }]  (없는 책은 항목도 없음)
+     - 저장 사진은 긴 변 1000px JPEG(품질 0.78). 책 페이지 글씨가 읽리는 크기입니다.
+     - 표지 사진(photo)과 별개이며, 표지는 그대로 둡니다.
+     ------------------------------------------------------------------ */
+
+  var GALLERY_MAX_COUNT = 30;
+  var GALLERY_NOTE_MAX = 120;
+  var GALLERY_LONG_SIDE = 1000;
+  var GALLERY_QUALITY = 0.78;
+  var GALLERY_TARGET_CHARS = 250000;   /* 한 장 ~180KB */
+  var GALLERY_MAX_CHARS = 420000;      /* 한 장 최대 ~300KB */
+  var GALLERY_STEPS = [[1000, 0.78], [1000, 0.7], [960, 0.66], [900, 0.62],
+                       [820, 0.58], [760, 0.54], [700, 0.5]];
+  /* 사진첩 글자 수 합계가 이보다 넘으면 저장 공간이 빠듯하다고 알립니다. (약 2.7MB) */
+  var GALLERY_WARN_CHARS = 2700000;
+
+  function galleryId() {
+    return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  function normalizeGalleryId(value) {
+    var text = String(value == null ? '' : value);
+    return /^[A-Za-z0-9_-]{1,40}$/.test(text) ? text : '';
+  }
+
+  function normalizeGalleryNote(value) {
+    return String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, GALLERY_NOTE_MAX);
+  }
+
+  function normalizeGalleryPhoto(value) {
+    if (value == null) return '';
+    var text = String(value).trim();
+    if (!text || text.length > GALLERY_MAX_CHARS) return '';
+    if (!PHOTO_PATTERN.test(text)) return '';
+    return text;
+  }
+
+  /* 저장 파일·불러온 파일의 사진첩을 다듬습니다. 모양이 이상한 사진은 버립니다. */
+  function sanitizeGallery(value) {
+    if (Object.prototype.toString.call(value) !== '[object Array]') return [];
+    var out = [];
+    var used = {};
+    for (var i = 0; i < value.length && out.length < GALLERY_MAX_COUNT; i++) {
+      var raw = value[i];
+      if (!raw || typeof raw !== 'object') continue;
+      var url = normalizeGalleryPhoto(raw.dataUrl != null ? raw.dataUrl : raw.url);
+      if (!url) continue;
+      var id = normalizeGalleryId(raw.id);
+      while (!id || used[id]) id = galleryId();
+      used[id] = true;
+      var item = { id: id, dataUrl: url };
+      var note = normalizeGalleryNote(raw.note != null ? raw.note : raw.caption);
+      if (note) item.note = note;
+      var added = String((raw.addedAt != null ? raw.addedAt : raw.added_at) || '').trim();
+      if (added && !isNaN(new Date(added).getTime())) item.addedAt = added.slice(0, 32);
+      out.push(item);
+    }
+    return out;
+  }
+
+  function serializeGallery(list) {
+    var items = sanitizeGallery(list);
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+      var src = items[i];
+      var item = { id: src.id, dataUrl: src.dataUrl };
+      if (src.note) item.note = src.note;
+      if (src.addedAt) item.addedAt = src.addedAt;
+      out.push(item);
+    }
+    return out;
+  }
+
+  function galleryTotalKB(list) {
+    var kb = 0;
+    var items = list || [];
+    for (var i = 0; i < items.length; i++) kb += photoSizeKB(items[i] && items[i].dataUrl);
+    return kb;
+  }
+
+  function galleryTotalChars(list) {
+    var chars = 0;
+    var items = list || [];
+    for (var i = 0; i < items.length; i++) chars += String((items[i] && items[i].dataUrl) || '').length;
+    return chars;
+  }
+
+  function bookGallery(book) {
+    return sanitizeGallery(book && book.gallery);
+  }
+
+  /* 사진첩 사진 파일 → 저장용 data URL (긴 변 1000px, JPEG 0.78 — 너무 크면 조금씩 더 줄임) */
+  function compressGalleryImage(file) {
+    return decodeImage(file).then(function (source) {
+      var width = source.width || source.naturalWidth || 0;
+      var height = source.height || source.naturalHeight || 0;
+      if (!width || !height) {
+        if (source.close) { try { source.close(); } catch (e) {} }
+        throw new Error('empty-image');
+      }
+      var best = '';
+      for (var i = 0; i < GALLERY_STEPS.length; i++) {
+        best = drawScaled(source, width, height, GALLERY_STEPS[i][0], GALLERY_STEPS[i][1]);
+        if (best.length <= GALLERY_TARGET_CHARS) break;
+      }
+      if (source.close) { try { source.close(); } catch (e2) {} }
+      if (!best) throw new Error('encode-failed');
+      if (best.length > GALLERY_MAX_CHARS) throw new Error('too-big');
+      return best;
+    });
   }
 
   /* ------------------------------------------------------------------
@@ -2173,7 +2451,8 @@
       rating: parseRating(src.rating),
       tags: parseTags(src.tags),
       memo: String(memo == null ? '' : memo).trim(),
-      photo: normalizePhoto(src.photo)
+      photo: normalizePhoto(src.photo),
+      gallery: sanitizeGallery(src.gallery)
     };
   }
 
@@ -2194,6 +2473,9 @@
     /* 사진이 있는 책에만 photo 를 씁니다. 없으면 예전과 똑같은 모양입니다. */
     var photo = normalizePhoto(book.photo);
     if (photo) out.photo = photo;
+    /* 사진첩 사진이 있는 책에만 gallery 를 씁니다. */
+    var gallery = serializeGallery(book.gallery);
+    if (gallery.length) out.gallery = gallery;
     return out;
   }
 
@@ -2423,6 +2705,10 @@
     draftRating: 0,
     draftPhoto: '',
     photoBusy: false,
+    draftGallery: [],
+    galleryBusy: false,
+    galleryDone: 0,
+    galleryTotal: 0,
     draftExifDate: '',
     startTouched: false,
     tagsTouched: false,
@@ -2571,9 +2857,18 @@
     photoAiHint: $('photo-ai-hint'),
     photoPick: $('photo-pick'),
     btnPhotoClear: $('btn-photo-clear'),
+    albumGrid: $('album-grid'),
+    albumEmpty: $('album-empty'),
+    albumMeta: $('album-meta'),
+    galleryPick: $('gallery-pick'),
+    fGallery: $('f-gallery'),
     photoView: $('photo-view'),
     photoViewImg: $('photo-view-img'),
     photoViewCap: $('photo-view-cap'),
+    photoViewNote: $('photo-view-note'),
+    photoViewCount: $('photo-view-count'),
+    photoViewPrev: $('photo-view-prev'),
+    photoViewNext: $('photo-view-next'),
     photoViewClose: $('photo-view-close'),
     btnDelete: $('btn-delete'),
     dialog: $('dialog'),
@@ -2635,6 +2930,14 @@
 
     out += '<div class="card-stars">' +
       (book.rating > 0 ? starsHTML(book.rating) : '<span class="no-rating">별점 없음</span>') + '</div>';
+
+    /* 사진첩에 담은 사진이 있으면 작은 표시를 남깁니다. 누르면 바로 사진첩이 열립니다. */
+    var albumCount = bookGallery(book).length;
+    if (albumCount) {
+      out += '<div class="card-album"><button type="button" class="album-badge" data-action="album"' +
+        ' data-id="' + book.id + '" aria-label="' + esc(book.title || '책') + ' 사진첩 ' +
+        albumCount + '장 크게 보기">📸 사진첩 ' + albumCount + '</button></div>';
+    }
 
     if (book.memo) out += '<p class="card-memo">' + esc(book.memo) + '</p>';
 
@@ -3311,23 +3614,218 @@
     });
   }
 
+  /* ------------------------------------------------------------------
+     📸 사진첩 화면 (입력 시트 안의 그리드) + 사진 크게 보기(라이트박스)
+     ------------------------------------------------------------------ */
+
+  function albumItemHTML(item, index) {
+    var note = item.note || '';
+    var label = note || ('사진 ' + (index + 1));
+    var out = '<div class="album-item" data-gallery-id="' + esc(item.id) + '">';
+    out += '<button type="button" class="album-shot" data-action="album-photo" data-index="' + index + '"' +
+      ' aria-label="' + esc(label) + ' 크게 보기">' +
+      '<img src="' + esc(item.dataUrl) + '" alt="" loading="lazy" decoding="async"></button>';
+    out += '<button type="button" class="album-del" data-action="album-del" data-index="' + index + '"' +
+      ' aria-label="' + esc(label) + ' 삭제">✕</button>';
+    out += '<input class="album-note" type="text" maxlength="' + GALLERY_NOTE_MAX + '"' +
+      ' data-gallery-note="' + esc(item.id) + '" value="' + esc(note) + '"' +
+      ' placeholder="메모 (예: p.142 기억하고 싶은 문장)"' +
+      ' aria-label="' + esc((index + 1) + '번째 사진 메모') + '">';
+    return out + '</div>';
+  }
+
+  function renderAlbum() {
+    if (!els.albumGrid || !els.albumMeta || !els.albumEmpty) return;
+    var items = state.draftGallery || [];
+
+    if (els.galleryPick) els.galleryPick.className = 'btn sm' + (state.galleryBusy ? ' hidden' : '');
+
+    var html = '';
+    for (var i = 0; i < items.length; i++) html += albumItemHTML(items[i], i);
+    els.albumGrid.innerHTML = html;
+    els.albumEmpty.className = 'album-empty' + (items.length ? ' hidden' : '');
+
+    var text = '';
+    if (state.galleryBusy) {
+      text = '사진을 줄이는 중이에요… (' + state.galleryDone + '/' + state.galleryTotal + ')';
+    } else if (!items.length) {
+      text = '기억하고 싶은 구절을 찍어 두면 이 책의 사진첩에 모입니다. (긴 변 1000px JPEG — 글씨가 읽리는 크기)';
+    } else {
+      text = '사진 ' + items.length + '장 · 약 ' + formatKB(galleryTotalKB(items)) +
+        ' · 사진을 누르면 크게 보고, 아래 칸에 페이지·메모를 남길 수 있어요. 저장을 누르면 반영됩니다.';
+    }
+    var warn = galleryTotalChars(items) > GALLERY_WARN_CHARS;
+    if (warn && !state.galleryBusy) {
+      text += ' 저장 공간이 빠듯해요 — 몇 장만 남기거나 ‘백업·관리’에서 JSON으로 내보낸 뒤 정리해 주세요.';
+    }
+    els.albumMeta.className = 'photo-meta album-meta' + (warn ? ' warn' : '');
+    els.albumMeta.textContent = text;
+  }
+
+  function setDraftGalleryNote(id, value) {
+    var items = state.draftGallery || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id !== id) continue;
+      var next = { id: items[i].id, dataUrl: items[i].dataUrl };
+      var note = normalizeGalleryNote(value);
+      if (note) next.note = note;
+      if (items[i].addedAt) next.addedAt = items[i].addedAt;
+      items[i] = next;
+      return;
+    }
+  }
+
+  function removeDraftGalleryItem(index) {
+    var items = (state.draftGallery || []).slice();
+    if (index < 0 || index >= items.length) return false;
+    items.splice(index, 1);
+    state.draftGallery = items;
+    return true;
+  }
+
+  /* 고른 사진 여러 장을 한 장씩 줄여 사진첩 초안에 담습니다. */
+  function handleGalleryFiles(fileList) {
+    var files = [];
+    var i;
+    for (i = 0; fileList && i < fileList.length; i++) files.push(fileList[i]);
+    if (!files.length) return;
+    if (state.galleryBusy) {
+      toast('사진을 담는 중이에요. 잠깐만 기다려 주세요.');
+      return;
+    }
+
+    var room = GALLERY_MAX_COUNT - (state.draftGallery || []).length;
+    if (room <= 0) {
+      toast('사진첩은 책마다 ' + GALLERY_MAX_COUNT + '장까지 담을 수 있어요.');
+      return;
+    }
+
+    var accepted = [];
+    var skipped = 0;
+    var rejected = 0;
+    var heic = false;
+    for (i = 0; i < files.length; i++) {
+      var file = files[i];
+      if (!isImageFile(file)) { rejected += 1; continue; }
+      if (isHeicFile(file)) heic = true;
+      if (file.size && file.size > PHOTO_MAX_FILE) { rejected += 1; continue; }
+      if (accepted.length >= room) { skipped += 1; continue; }
+      accepted.push(file);
+    }
+    if (!accepted.length) {
+      if (rejected) toast('사진 파일만 넣을 수 있어요. (25MB 이하 JPG·PNG)' + (heic ? ' 아이폰 HEIC 사진은 JPG로 바꿔 주세요.' : ''));
+      else toast('사진첩은 책마다 ' + GALLERY_MAX_COUNT + '장까지 담을 수 있어요.');
+      return;
+    }
+
+    state.galleryBusy = true;
+    state.galleryDone = 0;
+    state.galleryTotal = accepted.length;
+    renderAlbum();
+
+    var added = 0;
+    var failed = 0;
+    var chain = Promise.resolve();
+    accepted.forEach(function (one) {
+      chain = chain.then(function () {
+        return compressGalleryImage(one).then(function (url) {
+          state.draftGallery = (state.draftGallery || []).concat([{
+            id: galleryId(), dataUrl: url, note: '', addedAt: new Date().toISOString()
+          }]);
+          added += 1;
+        }, function (err) {
+          failed += 1;
+          if (err && err.message !== 'too-big') heic = heic || isHeicFile(one);
+        });
+      }).then(function () {
+        state.galleryDone += 1;
+        renderAlbum();
+      });
+    });
+
+    chain.then(function () {
+      state.galleryBusy = false;
+      state.galleryDone = 0;
+      state.galleryTotal = 0;
+      renderAlbum();
+
+      var bits = [];
+      if (added) bits.push('사진 ' + added + '장을 사진첩에 담았어요. (저장을 누르면 반영)');
+      if (failed) bits.push(failed + '장은 읽지 못했어요' + (heic ? ' — 아이폰 HEIC는 JPG로 바꿔 주세요' : ''));
+      if (skipped) bits.push(skipped + '장은 ' + GALLERY_MAX_COUNT + '장 한도로 건너뛰었어요');
+      if (!bits.length) bits.push('사진을 담지 못했어요. 다른 사진으로 다시 해 보세요.');
+      toast(bits.join(' '));
+    });
+  }
+
+  var lightbox = { items: [], index: 0, title: '', subtitle: '', kind: 'cover' };
+
+  function renderLightbox() {
+    var items = lightbox.items || [];
+    var item = items[lightbox.index] || {};
+    els.photoViewImg.src = item.dataUrl || '';
+    els.photoViewImg.alt = (lightbox.title || '사진') + ' 사진';
+    var cap = [];
+    if (lightbox.title) cap.push(lightbox.title);
+    if (lightbox.subtitle) cap.push(lightbox.subtitle);
+    els.photoViewCap.textContent = cap.join(' · ');
+    els.photoViewNote.textContent = item.note || '';
+    var many = items.length > 1;
+    els.photoViewPrev.className = 'pv-nav pv-prev' + (many ? '' : ' hidden');
+    els.photoViewNext.className = 'pv-nav pv-next' + (many ? '' : ' hidden');
+    els.photoViewCount.textContent = many ? (lightbox.index + 1) + ' / ' + items.length : '';
+  }
+
+  function showLightbox(items, index, meta) {
+    var list = (items || []).slice();
+    if (!list.length) return;
+    lightbox.items = list;
+    lightbox.index = Math.max(0, Math.min(list.length - 1, index || 0));
+    lightbox.title = (meta && meta.title) || '';
+    lightbox.subtitle = (meta && meta.subtitle) || '';
+    lightbox.kind = (meta && meta.kind) || 'gallery';
+    renderLightbox();
+    els.photoView.className = 'photo-view';
+    document.body.classList.add('locked');
+  }
+
+  function lightboxStep(delta) {
+    var total = (lightbox.items || []).length;
+    if (total < 2) return;
+    lightbox.index = (lightbox.index + delta + total) % total;
+    renderLightbox();
+  }
+
   function openPhotoView(book) {
     var photo = normalizePhoto(book && book.photo);
     if (!photo) return;
-    els.photoViewImg.src = photo;
-    els.photoViewImg.alt = (book.title || '책') + ' 사진';
-    var cap = [];
-    if (book.title) cap.push(book.title);
-    if (book.author) cap.push(book.author);
-    els.photoViewCap.textContent = cap.join(' · ');
-    els.photoView.className = 'photo-view';
-    document.body.classList.add('locked');
+    showLightbox([{ dataUrl: photo }], 0, {
+      title: (book && book.title) || '',
+      subtitle: (book && book.author) || '',
+      kind: 'cover'
+    });
+  }
+
+  function openGalleryView(book, index) {
+    var items = bookGallery(book);
+    if (!items.length) { openPhotoView(book); return; }
+    showLightbox(items, index || 0, {
+      title: (book && book.title) || '',
+      subtitle: (book && book.author) || '',
+      kind: 'gallery'
+    });
   }
 
   function closePhotoView() {
     if (!els.photoView || els.photoView.className.indexOf('hidden') !== -1) return;
     els.photoView.className = 'photo-view hidden';
     els.photoViewImg.removeAttribute('src');
+    els.photoViewNote.textContent = '';
+    els.photoViewCount.textContent = '';
+    lightbox.items = [];
+    lightbox.index = 0;
+    /* 수정 시트가 열려 있으면(body 잠금 유지) 그대로 둡니다. */
+    if (els.sheet && els.sheet.className.indexOf('hidden') === -1) return;
     document.body.classList.remove('locked');
   }
 
@@ -3335,6 +3833,7 @@
     var opts = options || {};
     var lines = ['브라우저에 기록을 담는 공간(약 5MB)이 꽉 찼어요.'];
     if (opts.photoKB) lines.push('이번 사진: 약 ' + formatKB(opts.photoKB));
+    if (opts.galleryCount) lines.push('사진첩 사진 ' + opts.galleryCount + '장: 약 ' + formatKB(opts.galleryKB));
     if (opts.usedKB) lines.push('지금 기록: 약 ' + formatKB(opts.usedKB) + ' (추정)');
     lines.push('');
     lines.push(opts.advice || '사진을 빼고 저장하거나, ‘백업·관리’에서 JSON으로 내보낸 뒤 사진이 많은 책의 사진을 지워 주세요.');
@@ -3349,50 +3848,75 @@
 
   function showBookQuotaDialog(data) {
     var usage = storageUsage();
+    var galleryCount = (data.gallery || []).length;
     showQuotaDialog({
       photoKB: photoSizeKB(data.photo),
+      galleryCount: galleryCount,
+      galleryKB: galleryTotalKB(data.gallery),
       usedKB: usage.kb,
-      retryLabel: '사진 빼고 저장',
+      retryLabel: galleryCount ? '사진첩 사진 빼고 저장' : '사진 빼고 저장',
       onRetry: function () {
-        state.draftPhoto = '';
-        renderPhoto();
+        /* 사진첩이 있으면 사진첩만 빼고(표지는 남기고), 그래도 부족하면 표지까지 뻔다. */
+        var keepCover = galleryCount ? !!normalizePhoto(state.draftPhoto) : false;
+        state.draftGallery = [];
+        if (!keepCover) state.draftPhoto = '';
         state.photoBusy = false;
-        var result = applyData({
-          title: data.title,
-          author: data.author,
-          status: data.status,
-          date: data.date,
-          started_at: data.started_at,
-          rating: data.rating,
-          tags: data.tags,
-          memo: data.memo,
-          photo: ''
-        });
-        if (!result.ok) {
-          toast('사진을 빼도 공간이 부족해요. JSON으로 백업한 뒤 기록을 정리해 주세요.');
-          return;
+        renderPhoto();
+        renderAlbum();
+
+        var result = applyQuotaRetry(keepCover ? '' : '사진을');
+        if (result.ok) return;
+
+        if (keepCover) {
+          /* 사진첩을 빼도 안 들어가면 표지 사진까지 뻔다. */
+          state.draftPhoto = '';
+          renderPhoto();
+          result = applyQuotaRetry('사진을 모두');
+          if (result.ok) return;
         }
-        var wasEdit = state.editingId != null;
-        closeSheet();
-        renderAll();
-        toast(wasEdit ? '사진을 빼고 수정했어요.' : '사진 없이 저장했어요.');
+        toast('사진을 빼도 공간이 부족해요. JSON으로 백업한 뒤 기록을 정리해 주세요.');
       }
     });
   }
 
+  /* 공간 부족 안내에서 “사진 빼고 저장”을 골랐을 때 지금 초안으로 다시 저장합니다. */
+  function applyQuotaRetry(droppedLabel) {
+    var wasEdit = state.editingId != null;
+    var data = collectFormData();
+    data.gallery = [];
+    data.photo = normalizePhoto(state.draftPhoto);
+    var result = applyData(data);
+    if (!result.ok) return result;
+    closeSheet();
+    renderAll();
+    var head = droppedLabel === '사진을 모두' ? '사진과 사진첩을 모두 빼고'
+      : (droppedLabel ? '사진을 빼고' : '사진첩 사진을 빼고');
+    toast(head + (wasEdit ? ' 수정했어요.' : ' 저장했어요.'));
+    return result;
+  }
+
   function showImportQuotaDialog(books, mode) {
     var photoKB = 0;
-    for (var i = 0; i < books.length; i++) photoKB += photoSizeKB(books[i].photo);
+    var galleryKB = 0;
+    var galleryCount = 0;
+    for (var i = 0; i < books.length; i++) {
+      photoKB += photoSizeKB(books[i].photo);
+      galleryCount += (books[i].gallery || []).length;
+      galleryKB += galleryTotalKB(books[i].gallery);
+    }
     showQuotaDialog({
       photoKB: photoKB,
+      galleryCount: galleryCount,
+      galleryKB: galleryKB,
       retryLabel: '사진 빼고 가져오기',
-      advice: '가져온 책의 사진(' + formatKB(photoKB) + ') 때문에 넘쳤어요.\n' +
+      advice: '가져온 책의 사진(' + formatKB(photoKB + galleryKB) + ') 때문에 넘쳤어요.\n' +
         '사진을 빼고 가져오거나, ‘백업·관리’에서 지금 기록을 정리해 주세요.',
       onRetry: function () {
         var stripped = [];
         for (var j = 0; j < books.length; j++) {
           var copy = sanitizeBook(books[j]);
           copy.photo = '';
+          copy.gallery = [];
           stripped.push(copy);
         }
         var result = applyImport(stripped, mode);
@@ -3419,6 +3943,10 @@
     state.draftRating = book ? book.rating : 0;
     state.draftPhoto = book ? normalizePhoto(book.photo) : '';
     state.photoBusy = false;
+    state.draftGallery = book ? bookGallery(book) : [];
+    state.galleryBusy = false;
+    state.galleryDone = 0;
+    state.galleryTotal = 0;
     state.draftExifDate = '';
     state.startTouched = false;
     state.tagsTouched = false;
@@ -3429,12 +3957,14 @@
     state.coverCategory = '';
     state.coverToken = (state.coverToken || 0) + 1;
     try { els.fPhoto.value = ''; } catch (err) {}
+    try { els.fGallery.value = ''; } catch (err0) {}
 
     els.btnDelete.className = book ? 'btn danger' : 'btn danger hidden';
 
     renderSeg();
     renderStars();
     renderPhoto();
+    renderAlbum();
 
     els.sheet.className = 'sheet';
     els.sheetBackdrop.className = 'backdrop';
@@ -3456,6 +3986,10 @@
     state.editingId = null;
     state.draftPhoto = '';
     state.photoBusy = false;
+    state.draftGallery = [];
+    state.galleryBusy = false;
+    state.galleryDone = 0;
+    state.galleryTotal = 0;
     state.draftExifDate = '';
     state.startTouched = false;
     state.tagsTouched = false;
@@ -3466,6 +4000,7 @@
     state.coverCategory = '';
     state.coverToken = (state.coverToken || 0) + 1;
     try { els.fPhoto.value = ''; } catch (err) {}
+    try { els.fGallery.value = ''; } catch (err1) {}
     if (document.activeElement && document.activeElement.blur) {
       try { document.activeElement.blur(); } catch (err2) {}
     }
@@ -3481,7 +4016,8 @@
       rating: state.draftRating,
       tags: parseTags(els.fTags.value),
       memo: els.fMemo.value.trim(),
-      photo: normalizePhoto(state.draftPhoto)
+      photo: normalizePhoto(state.draftPhoto),
+      gallery: serializeGallery(state.draftGallery)
     };
   }
 
@@ -3496,7 +4032,8 @@
       rating: data.rating,
       tags: data.tags,
       memo: data.memo,
-      photo: data.photo
+      photo: data.photo,
+      gallery: data.gallery ? data.gallery.slice() : []
     };
   }
 
@@ -3545,6 +4082,11 @@
 
     if (state.photoBusy) {
       toast('사진을 줄이는 중이에요. 잠깐만 기다려 주세요.');
+      return;
+    }
+
+    if (state.galleryBusy) {
+      toast('사진첩 사진을 담는 중이에요. 잠깐만 기다려 주세요.');
       return;
     }
 
@@ -3615,7 +4157,8 @@
     unsub: null,
     busy: false,
     error: '',
-    count: 0
+    count: 0,
+    galleryBlocked: false
   };
 
   function shareConfigured() {
@@ -3716,6 +4259,7 @@
       memo: String(book.memo || ''),
       started_at: String(book.started_at || ''),
       photo: String(book.photo || ''),
+      gallery: serializeGallery(book.gallery),
       updatedAt: null
     };
   }
@@ -3745,17 +4289,60 @@
 
   function prepareShareDoc(book) {
     var doc = shareDocFor(book);
-    var size = 0;
-    try { size = JSON.stringify(doc).length; } catch (e) { size = 0; }
-    if (doc.photo && size > SHARE_PHOTO_MAX_CHARS) {
-      var room = SHARE_PHOTO_MAX_CHARS - (size - doc.photo.length) - 2000;
-      return shrinkPhotoForShare(doc.photo, room).then(function (small) {
-        if (!small) return { doc: withEmptyPhoto(doc), photoDropped: true };
-        doc.photo = small;
-        return { doc: doc, photoDropped: false };
-      });
+    var gallery = doc.gallery || [];
+    var size = docChars(doc);
+    if (size <= SHARE_DOC_MAX_CHARS) {
+      return Promise.resolve({ doc: doc, photoDropped: false, galleryDropped: 0 });
     }
-    return Promise.resolve({ doc: doc, photoDropped: false });
+
+    /* 사진첩이 차지하는 몫을 빼고, 남은 한도 안에서 사진첩을 다시 줄입니다. */
+    var galleryChars = 0;
+    for (var i = 0; i < gallery.length; i++) {
+      galleryChars += String(gallery[i].dataUrl || '').length + 200;
+    }
+    var budget = Math.max(0, SHARE_DOC_MAX_CHARS - (size - galleryChars) - 2000);
+    return fitGalleryForShare(gallery, budget).then(function (fitted) {
+      doc.gallery = fitted.list;
+      var left = docChars(doc);
+      if (left <= SHARE_DOC_MAX_CHARS || !doc.photo) {
+        return { doc: doc, photoDropped: false, galleryDropped: fitted.dropped };
+      }
+      /* 그래도 넘치면 표지 사진을 줄이고, 안 되면 공유본에서 뺩니다. */
+      var room = SHARE_DOC_MAX_CHARS - (left - String(doc.photo).length) - 2000;
+      return shrinkPhotoForShare(doc.photo, Math.max(0, room)).then(function (small) {
+        doc.photo = small || '';
+        return { doc: doc, photoDropped: !small, galleryDropped: fitted.dropped };
+      });
+    });
+  }
+
+  /* Firestore 문서 한도(1MB) 안에서 사진첩 몫만큼 사진을 줄입니다.
+     너무 작게 줄여야 하면(구절 글씨를 읽기 어려우면) 그 사진은 공유본에서 뻔다. */
+  function fitGalleryForShare(items, budget) {
+    var list = [];
+    if (!items || !items.length) return Promise.resolve({ list: list, dropped: 0 });
+    var per = Math.floor(budget / items.length);
+    var chain = Promise.resolve();
+    items.forEach(function (item) {
+      chain = chain.then(function () {
+        var url = String(item.dataUrl || '');
+        if (!url) return null;
+        var room = per - 800;
+        if (url.length <= room) { list.push(item); return null; }
+        if (room < SHARE_GALLERY_MIN_CHARS) return null;
+        return shrinkPhotoForShare(url, room).then(function (small) {
+          if (!small) return null;
+          var copy = { id: item.id, dataUrl: small };
+          if (item.note) copy.note = item.note;
+          if (item.addedAt) copy.addedAt = item.addedAt;
+          list.push(copy);
+          return null;
+        });
+      });
+    });
+    return chain.then(function () {
+      return { list: list, dropped: items.length - list.length };
+    });
   }
 
   function withEmptyPhoto(doc) {
@@ -3767,6 +4354,10 @@
     return copy;
   }
 
+  function docChars(doc) {
+    try { return JSON.stringify(doc).length; } catch (e) { return 0; }
+  }
+
   function sharePushBook(book) {
     if (!shared.active || !shared.fs) return Promise.resolve();
     var fs = shared.fs;
@@ -3774,14 +4365,39 @@
     var roomId = shared.roomId;
     return prepareShareDoc(book).then(function (prepared) {
       if (prepared.photoDropped) toast('사진이 너무 커서 공유본에서는 뺐어요.');
+      if (prepared.galleryDropped) {
+        toast('사진첩 사진 ' + prepared.galleryDropped + '장은 공유본에서 뺐어요 (문서 1MB 한도).');
+      }
       var doc = prepared.doc;
       doc.updatedAt = mod.serverTimestamp();
-      return mod.setDoc(mod.doc(fs.db, SHARE_COLLECTION, roomId, 'books', String(book.id)), doc);
+      return writeShareDoc(mod, fs, book, doc);
     }).catch(function (err) {
       shared.error = shareErrorMessage(err);
       toast('공유 저장 실패: ' + shared.error);
       if (state.view === 'backup') renderBackup();
     });
+  }
+
+  /* firestore.rules 에 아직 gallery 항목이 없으면 사진첩을 뺀 문서로 한 번 더 씁니다.
+     (사진첩은 이 기기에 남고, 글자·표지 공유는 그대로 됩니다.) */
+  function writeShareDoc(mod, fs, book, doc) {
+    var ref = mod.doc(fs.db, SHARE_COLLECTION, shared.roomId, 'books', String(book.id));
+    return mod.setDoc(ref, doc).catch(function (err) {
+      if (!isPermissionDenied(err) || !('gallery' in doc)) throw err;
+      var copy = {};
+      for (var key in doc) {
+        if (Object.prototype.hasOwnProperty.call(doc, key) && key !== 'gallery') copy[key] = doc[key];
+      }
+      shared.galleryBlocked = true;
+      toast('사진첩은 아직 공유 규칙에 없어 이 기기에만 저장했어요.');
+      if (state.view === 'backup') renderBackup();
+      return mod.setDoc(ref, copy);
+    });
+  }
+
+  function isPermissionDenied(err) {
+    var text = String((err && (err.code || err.message)) || '').toLowerCase();
+    return text.indexOf('permission-denied') !== -1;
   }
 
   function shareDeleteBook(id) {
@@ -3845,7 +4461,8 @@
           rating: data.rating,
           tags: data.tags,
           memo: data.memo,
-          photo: data.photo
+          photo: data.photo,
+          gallery: data.gallery
         });
         if (!book.id) book.id = toInt(docSnap.id);
         list.push(book);
@@ -3889,6 +4506,7 @@
     var upload = opts.upload ? state.books.slice() : null;
     shared.busy = true;
     shared.error = '';
+    shared.galleryBlocked = false;
     if (state.view === 'backup') syncSharePanel();
 
     loadFirestore().then(function () {
@@ -3924,6 +4542,7 @@
     shared.busy = false;
     shared.error = '';
     shared.count = 0;
+    shared.galleryBlocked = false;
     rememberRoom('');
     setShareUrl('');
     load();
@@ -4008,6 +4627,10 @@
         '방을 나가면 이 기기에 저장된 원래 내 책장으로 돌아갑니다.</p>';
       if (shared.error) {
         html += '<p class="key-state warn" id="share-error">' + esc(shared.error) + '</p>';
+      }
+      if (shared.galleryBlocked) {
+        html += '<p class="key-state warn" id="share-gallery-note">📸 사진첩은 공유 규칙(firestore.rules)에 아직 없어 이 기기에만 남습니다. ' +
+          '규칙을 게시하면 사진첩도 함께 공유됩니다.</p>';
       }
       html += '</div>';
       return html;
@@ -4303,8 +4926,10 @@
     });
 
     els.photoViewClose.addEventListener('click', closePhotoView);
+    els.photoViewPrev.addEventListener('click', function () { lightboxStep(-1); });
+    els.photoViewNext.addEventListener('click', function () { lightboxStep(1); });
     els.photoView.addEventListener('click', function (event) {
-      if (event.target === els.photoView) closePhotoView();
+      if (event.target === els.photoView || event.target === els.photoViewImg.parentNode) closePhotoView();
     });
 
     els.search.addEventListener('input', function () {
@@ -4338,6 +4963,27 @@
       }
       if (action === 'photo') {
         openPhotoView(findBook(parseInt(node.getAttribute('data-id'), 10)));
+        return;
+      }
+      if (action === 'album') {
+        openGalleryView(findBook(parseInt(node.getAttribute('data-id'), 10)), 0);
+        return;
+      }
+      if (action === 'album-photo') {
+        var albumIndex = parseInt(node.getAttribute('data-index'), 10);
+        showLightbox(state.draftGallery || [], albumIndex, {
+          title: els.fTitle.value.trim() || (state.editingId != null ? '사진첩' : '새 책 사진첩'),
+          subtitle: els.fAuthor.value.trim(),
+          kind: 'draft'
+        });
+        return;
+      }
+      if (action === 'album-del') {
+        var delIndex = parseInt(node.getAttribute('data-index'), 10);
+        if (removeDraftGalleryItem(delIndex)) {
+          renderAlbum();
+          toast('사진을 사진첩에서 뺐어요. 저장을 누르면 반영됩니다.');
+        }
         return;
       }
       if (action === 'open-new') { openSheet(null); return; }
@@ -4398,6 +5044,19 @@
 
     document.addEventListener('keydown', function (event) {
       var key = event.key;
+      var noteTarget = event.target && event.target.getAttribute
+        ? event.target.getAttribute('data-gallery-note') : null;
+      /* 사진 메모 칸에서 Enter 는 저장이 아니라 입력 끝으로 봅니다. */
+      if (key === 'Enter' && noteTarget) {
+        event.preventDefault();
+        try { event.target.blur(); } catch (noteErr) {}
+        return;
+      }
+      if (els.photoView.className.indexOf('hidden') === -1 && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+        event.preventDefault();
+        lightboxStep(key === 'ArrowLeft' ? -1 : 1);
+        return;
+      }
       if (key === 'Escape') {
         if (els.photoView.className.indexOf('hidden') === -1) { closePhotoView(); return; }
         if (els.dialog.className.indexOf('hidden') === -1) { closeDialog(); return; }
@@ -4433,7 +5092,25 @@
         /* 같은 사진을 다시 고를 수 있도록 입력값은 바로 닫습니다. */
         try { target.value = ''; } catch (err) {}
         handlePhotoFile(picked);
+        return;
       }
+      if (target.id === 'f-gallery') {
+        var pickedGallery = [];
+        for (var gi = 0; gi < (target.files ? target.files.length : 0); gi++) {
+          pickedGallery.push(target.files[gi]);
+        }
+        try { target.value = ''; } catch (err2) {}
+        handleGalleryFiles(pickedGallery);
+      }
+    });
+
+    /* 사진첩 사진 메모는 치는 대로 초안에 담아 둡니다(다시 그리지 않아 커서가 안 튀어요). */
+    document.addEventListener('input', function (event) {
+      var target = event.target;
+      if (!target || !target.getAttribute) return;
+      var gid = target.getAttribute('data-gallery-note');
+      if (!gid) return;
+      setDraftGalleryNote(gid, target.value);
     });
   }
 
@@ -4486,6 +5163,17 @@
     toCSV: toCSV,
     normalizePhoto: normalizePhoto,
     photoSizeKB: photoSizeKB,
+    sanitizeGallery: sanitizeGallery,
+    serializeGallery: serializeGallery,
+    normalizeGalleryPhoto: normalizeGalleryPhoto,
+    compressGalleryImage: compressGalleryImage,
+    prepareShareDoc: prepareShareDoc,
+    writeShareDoc: writeShareDoc,
+    SHARE_DOC_MAX_CHARS: SHARE_DOC_MAX_CHARS,
+    galleryTotalKB: galleryTotalKB,
+    GALLERY_MAX_COUNT: GALLERY_MAX_COUNT,
+    GALLERY_MAX_CHARS: GALLERY_MAX_CHARS,
+    GALLERY_NOTE_MAX: GALLERY_NOTE_MAX,
     compressImage: compressImage,
     exifDateToISO: exifDateToISO,
     extractExifDate: extractExifDate,
