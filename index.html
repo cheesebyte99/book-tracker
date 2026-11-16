@@ -825,6 +825,7 @@
 
   .key-state { margin: 9px 0 0; font-size: 12px; font-weight: 700; color: var(--ink-3); line-height: 1.5; }
   .key-state.on { color: var(--done-fg); }
+  .key-state.warn { color: var(--danger); }
 
   /* ---------- 다이얼로그 ---------- */
   #dialog-backdrop { z-index: 70; }
@@ -1124,6 +1125,28 @@
 
   var STORAGE_KEY = 'pickle_book_tracker_v1';
   var META_KEY = 'pickle_book_tracker_v1_meta';
+
+  /* ------------------------------------------------------------------
+     🔗 실시간 공유 설정 (Firebase · jaeyeon-life 프로젝트)
+     - '백업·관리' 탭에서 공유를 시작하면 책장을 Firestore 에 올리고
+       링크(?room=...)를 아는 사람과 실시간으로 함께 씁니다.
+     - 아래 값은 웹 앱 공개 설정입니다(비밀 키가 아님).
+     - Gemini API 키는 이 코드에도, Firestore 에도 쓰지 않습니다.
+       키는 각 기기의 localStorage 에만 있습니다.
+     ------------------------------------------------------------------ */
+  var FIREBASE_CONFIG = {
+    apiKey: 'AIzaSyCXfKiu_ckkePfdPBOL8NkUNvpTD9DGisU',
+    authDomain: 'jaeyeon-life.firebaseapp.com',
+    projectId: 'jaeyeon-life',
+    storageBucket: 'jaeyeon-life.firebasestorage.app',
+    messagingSenderId: '1085807433548',
+    appId: '1:1085807433548:web:36ae02c4b357e8ea23e1e9'
+  };
+  var FIREBASE_VERSION = '10.14.1';
+  var SHARE_COLLECTION = 'bookshelves';
+  var SHARE_ROOM_KEY = 'pickle_book_tracker_share_room';
+  /* Firestore 문서 한도는 1MB 입니다. 사진 몫을 700KB 아래로 맞춥니다. */
+  var SHARE_PHOTO_MAX_CHARS = 700000;
 
   var STATUSES = ['완독', '읽는 중', '읽고 싶음'];
   var FILTERS = ['전체', '완독', '읽는 중', '읽고 싶음'];
@@ -2448,6 +2471,10 @@
   }
 
   function save() {
+    /* 공유 중에는 이 기기(localStorage) 기록을 건드리지 않습니다.
+       방을 나가면 원래 내 책장 기록으로 돌아옵니다. */
+    if (shared.active) return { ok: true, quota: false, shared: true };
+
     var payload = makePayload(state.books, state.lastId);
     var text;
     try {
@@ -2659,6 +2686,10 @@
       }
       els.headSub.textContent = '총 ' + state.books.length + '권 · 완독 ' + done + '권 · 올해 ' + yearCount + '권';
     }
+
+    if (shared.active) {
+      els.headSub.textContent = '🔗 공유 중 · ' + els.headSub.textContent;
+    }
   }
 
   function renderShelf() {
@@ -2868,6 +2899,8 @@
       '<p class="hint">무료 키 만들기: <a href="https://aistudio.google.com/apikey" target="_blank" ' +
       'rel="noopener">Google AI Studio · aistudio.google.com/apikey</a> 에서 ‘Create API key’ 를 누르면 됩니다. ' +
       '키를 넣지 않아도 사진·날짜·백업은 모두 그대로 동작합니다.</p></div>';
+
+    html += sharePanelHTML();
 
     html += '<div class="danger-panel"><h3>⚠️ 위험 구역</h3>' +
       '<p>모든 기록을 지웁니다. 되돌릴 수 없으니 먼저 백업하는 것을 권합니다.</p>' +
@@ -3490,6 +3523,12 @@
     if (!result.ok) {
       state.books = snapshot.books;
       state.lastId = snapshot.lastId;
+      return result;
+    }
+    /* 공유 중이면 바뀜 책을 바로 올립니다. */
+    if (shared.active) {
+      var saved = findBook(state.editingId != null ? state.editingId : state.lastId);
+      if (saved) sharePushBook(saved);
     }
     return result;
   }
@@ -3553,12 +3592,451 @@
         onClick: function () {
           state.books = state.books.filter(function (b) { return b.id !== id; });
           var result = save();
+          if (shared.active) shareDeleteBook(id);
           closeSheet();
           renderAll();
           toast(result.ok ? '삭제했어요.' : result.message);
         }
       }]
     });
+  }
+
+  /* ------------------------------------------------------------------
+     🔗 실시간 공유 (Firebase Firestore)
+     - 방 하나 = 컬렉션 bookshelves/{roomId}/books, 문서 ID = 책 번호(id)
+     - 링크(?room=방ID)를 아는 사람은 같은 책장을 실시간으로 함께 봅니다.
+     - Gemini API 키는 코드에도, Firestore 에도 넣지 않습니다.
+     ------------------------------------------------------------------ */
+
+  var shared = {
+    active: false,
+    roomId: '',
+    fs: null,
+    unsub: null,
+    busy: false,
+    error: '',
+    count: 0
+  };
+
+  function shareConfigured() {
+    var key = String(FIREBASE_CONFIG.apiKey || '');
+    var project = String(FIREBASE_CONFIG.projectId || '');
+    return key.length > 20 && !!project && project.indexOf('your-project') !== 0;
+  }
+
+  function normalizeRoomId(raw) {
+    var text = String(raw == null ? '' : raw).toLowerCase().replace(/[^a-z0-9-]/g, '');
+    return text.slice(0, 40);
+  }
+
+  function randomRoomId() {
+    var alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
+    var bytes = null;
+    try {
+      bytes = new Uint8Array(8);
+      window.crypto.getRandomValues(bytes);
+    } catch (e) { bytes = null; }
+    var out = 'shelf-';
+    for (var i = 0; i < 8; i++) {
+      var n = bytes ? bytes[i] : Math.floor(Math.random() * 256);
+      out += alphabet.charAt(n % alphabet.length);
+    }
+    return out;
+  }
+
+  function roomFromUrl() {
+    var search = '';
+    try { search = String(window.location.search || ''); } catch (e) { search = ''; }
+    var match = search.match(/[?&]room=([^&]*)/);
+    if (!match) return '';
+    var value = match[1];
+    try { value = decodeURIComponent(value); } catch (e2) { value = match[1]; }
+    return normalizeRoomId(value);
+  }
+
+  function shareUrlFor(roomId) {
+    var base = '';
+    try { base = window.location.origin + window.location.pathname; } catch (e) { base = ''; }
+    return base + '?room=' + encodeURIComponent(roomId);
+  }
+
+  function setShareUrl(roomId) {
+    try {
+      if (!window.history || !window.history.replaceState) return;
+      var base = window.location.origin + window.location.pathname;
+      var next = roomId ? (base + '?room=' + encodeURIComponent(roomId)) : base;
+      window.history.replaceState(null, '', next + String(window.location.hash || ''));
+    } catch (e) {}
+  }
+
+  function rememberRoom(roomId) {
+    try {
+      if (roomId) storage.set(SHARE_ROOM_KEY, roomId);
+      else storage.remove(SHARE_ROOM_KEY);
+    } catch (e) {}
+  }
+
+  function lastRoomId() {
+    try { return normalizeRoomId(storage.get(SHARE_ROOM_KEY) || ''); } catch (e) { return ''; }
+  }
+
+  function shareErrorMessage(err) {
+    var text = String((err && (err.code || err.message)) || '').toLowerCase();
+    if (text.indexOf('permission-denied') !== -1) return '권한이 없어요 (firestore.rules 확인)';
+    if (text.indexOf('unavailable') !== -1 || text.indexOf('offline') !== -1) return '인터넷 연결을 확인해 주세요';
+    if (text.indexOf('not-found') !== -1) return 'Firestore 데이터베이스를 찾지 못했어요';
+    if (text.indexOf('api-key') !== -1) return 'Firebase 설정값(apiKey)을 확인해 주세요';
+    if (text.indexOf('too large') !== -1 || text.indexOf('invalid-argument') !== -1) return '내용이 너무 커서 올리지 못했어요';
+    return String((err && err.message) || '알 수 없는 오류');
+  }
+
+  /* Firebase JS SDK(v10)를 필요할 때 불러옵니다. */
+  function loadFirestore() {
+    if (shared.fs) return Promise.resolve(shared.fs);
+    var base = 'https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/';
+    return import(base + 'firebase-app.js').then(function (appMod) {
+      return import(base + 'firebase-firestore.js').then(function (fsMod) {
+        var apps = typeof appMod.getApps === 'function' ? appMod.getApps() : [];
+        var app = (apps && apps.length) ? appMod.getApp() : appMod.initializeApp(FIREBASE_CONFIG);
+        shared.fs = { app: app, db: fsMod.getFirestore(app), mod: fsMod };
+        return shared.fs;
+      });
+    });
+  }
+
+  function shareDocFor(book) {
+    return {
+      id: toInt(book.id),
+      title: String(book.title || ''),
+      author: String(book.author || ''),
+      status: normalizeStatus(book.status),
+      date: String(book.date || ''),
+      rating: toInt(book.rating),
+      tags: (book.tags || []).slice(0, 40).map(function (t) { return String(t); }),
+      memo: String(book.memo || ''),
+      started_at: String(book.started_at || ''),
+      photo: String(book.photo || ''),
+      updatedAt: null
+    };
+  }
+
+  /* 사진이 너무 크면 Firestore 한도 안으로 다시 줄입니다. (못 줄이면 사진만 뻐고) */
+  function shrinkPhotoForShare(dataUrl, maxChars) {
+    return new Promise(function (resolve) {
+      if (!dataUrl || dataUrl.length <= maxChars) { resolve(dataUrl || ''); return; }
+      if (maxChars < 20000) { resolve(''); return; }
+      var img = new Image();
+      img.onload = function () {
+        var width = img.naturalWidth || img.width;
+        var height = img.naturalHeight || img.height;
+        if (!width || !height) { resolve(''); return; }
+        var steps = [[600, 0.7], [520, 0.62], [440, 0.55], [360, 0.5], [280, 0.45], [220, 0.4]];
+        for (var i = 0; i < steps.length; i++) {
+          var out = '';
+          try { out = drawScaled(img, width, height, steps[i][0], steps[i][1]); } catch (e) { out = ''; }
+          if (out && out.length <= maxChars) { resolve(out); return; }
+        }
+        resolve('');
+      };
+      img.onerror = function () { resolve(''); };
+      img.src = dataUrl;
+    });
+  }
+
+  function prepareShareDoc(book) {
+    var doc = shareDocFor(book);
+    var size = 0;
+    try { size = JSON.stringify(doc).length; } catch (e) { size = 0; }
+    if (doc.photo && size > SHARE_PHOTO_MAX_CHARS) {
+      var room = SHARE_PHOTO_MAX_CHARS - (size - doc.photo.length) - 2000;
+      return shrinkPhotoForShare(doc.photo, room).then(function (small) {
+        if (!small) return { doc: withEmptyPhoto(doc), photoDropped: true };
+        doc.photo = small;
+        return { doc: doc, photoDropped: false };
+      });
+    }
+    return Promise.resolve({ doc: doc, photoDropped: false });
+  }
+
+  function withEmptyPhoto(doc) {
+    var copy = {};
+    for (var key in doc) {
+      if (Object.prototype.hasOwnProperty.call(doc, key)) copy[key] = doc[key];
+    }
+    copy.photo = '';
+    return copy;
+  }
+
+  function sharePushBook(book) {
+    if (!shared.active || !shared.fs) return Promise.resolve();
+    var fs = shared.fs;
+    var mod = fs.mod;
+    var roomId = shared.roomId;
+    return prepareShareDoc(book).then(function (prepared) {
+      if (prepared.photoDropped) toast('사진이 너무 커서 공유본에서는 뺐어요.');
+      var doc = prepared.doc;
+      doc.updatedAt = mod.serverTimestamp();
+      return mod.setDoc(mod.doc(fs.db, SHARE_COLLECTION, roomId, 'books', String(book.id)), doc);
+    }).catch(function (err) {
+      shared.error = shareErrorMessage(err);
+      toast('공유 저장 실패: ' + shared.error);
+      if (state.view === 'backup') renderBackup();
+    });
+  }
+
+  function shareDeleteBook(id) {
+    if (!shared.active || !shared.fs) return Promise.resolve();
+    var fs = shared.fs;
+    return fs.mod.deleteDoc(fs.mod.doc(fs.db, SHARE_COLLECTION, shared.roomId, 'books', String(id)))
+      .catch(function (err) {
+        shared.error = shareErrorMessage(err);
+        toast('공유 삭제 실패: ' + shared.error);
+      });
+  }
+
+  /* 이 기기의 책장 전체를 공유 방에 맞춥니다(방에만 있고 여기 없는 책은 지움). */
+  function sharePushAll(list) {
+    if (!shared.active || !shared.fs) return Promise.resolve();
+    var fs = shared.fs;
+    var mod = fs.mod;
+    var books = (list || state.books).slice();
+    var keep = {};
+    for (var i = 0; i < books.length; i++) keep[String(books[i].id)] = true;
+    var col = mod.collection(fs.db, SHARE_COLLECTION, shared.roomId, 'books');
+    return mod.getDocs(col).then(function (snap) {
+      var jobs = [];
+      snap.forEach(function (docSnap) {
+        if (!keep[docSnap.id]) jobs.push(mod.deleteDoc(docSnap.ref));
+      });
+      return Promise.all(jobs);
+    }).then(function () {
+      var jobs = books.map(function (book) { return sharePushBook(book); });
+      return Promise.all(jobs);
+    }).catch(function (err) {
+      shared.error = shareErrorMessage(err);
+      toast('공유 올리기 실패: ' + shared.error);
+    });
+  }
+
+  function shareUnsubscribe() {
+    if (shared.unsub) {
+      try { shared.unsub(); } catch (e) {}
+      shared.unsub = null;
+    }
+  }
+
+  function shareSubscribe() {
+    var fs = shared.fs;
+    if (!fs) return;
+    shareUnsubscribe();
+    var mod = fs.mod;
+    var col = mod.collection(fs.db, SHARE_COLLECTION, shared.roomId, 'books');
+    shared.unsub = mod.onSnapshot(col, function (snap) {
+      var list = [];
+      snap.forEach(function (docSnap) {
+        var data = docSnap.data() || {};
+        var book = sanitizeBook({
+          id: data.id != null ? data.id : docSnap.id,
+          title: data.title,
+          author: data.author,
+          status: data.status,
+          date: data.date,
+          started_at: data.started_at,
+          rating: data.rating,
+          tags: data.tags,
+          memo: data.memo,
+          photo: data.photo
+        });
+        if (!book.id) book.id = toInt(docSnap.id);
+        list.push(book);
+      });
+      list.sort(function (a, b) { return a.id - b.id; });
+      state.books = list;
+      var maxId = 0;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id > maxId) maxId = list[i].id;
+      }
+      state.lastId = maxId;
+      shared.count = list.length;
+      shared.error = '';
+      renderAll();
+      if (state.view === 'backup') syncSharePanel();
+    }, function (err) {
+      shared.error = shareErrorMessage(err);
+      toast('공유 연결 오류: ' + shared.error);
+      if (state.view === 'backup') syncSharePanel();
+    });
+  }
+
+  function syncSharePanel() {
+    var panel = document.getElementById('share-panel');
+    if (!panel) return;
+    var fresh = document.createElement('div');
+    fresh.innerHTML = sharePanelHTML();
+    if (fresh.firstChild && panel.parentNode) {
+      panel.parentNode.replaceChild(fresh.firstChild, panel);
+    }
+  }
+
+  function startShare(roomId, options) {
+    var opts = options || {};
+    if (shared.busy) return;
+    if (!shareConfigured()) {
+      toast('Firebase 설정값이 비어 있어 공유를 쓸 수 없어요.');
+      return;
+    }
+    var room = normalizeRoomId(roomId) || randomRoomId();
+    var upload = opts.upload ? state.books.slice() : null;
+    shared.busy = true;
+    shared.error = '';
+    if (state.view === 'backup') syncSharePanel();
+
+    loadFirestore().then(function () {
+      shared.roomId = room;
+      shared.active = true;
+      shared.busy = false;
+      shared.count = 0;
+      rememberRoom(room);
+      setShareUrl(room);
+      shareSubscribe();
+      renderAll();
+      if (state.view === 'backup') syncSharePanel();
+      if (upload) return sharePushAll(upload);
+      return null;
+    }).then(function () {
+      toast(upload ? '공유를 시작했어요. 링크를 복사해 보내 보세요.' : '공유 책장에 연결했어요.');
+      if (state.view === 'backup') syncSharePanel();
+    }).catch(function (err) {
+      shared.active = false;
+      shared.roomId = '';
+      shared.busy = false;
+      shared.error = shareErrorMessage(err);
+      toast('공유에 연결하지 못했어요. ' + shared.error);
+      renderAll();
+      if (state.view === 'backup') syncSharePanel();
+    });
+  }
+
+  function stopShare(silent) {
+    shareUnsubscribe();
+    shared.active = false;
+    shared.roomId = '';
+    shared.busy = false;
+    shared.error = '';
+    shared.count = 0;
+    rememberRoom('');
+    setShareUrl('');
+    load();
+    renderAll();
+    if (state.view === 'backup') syncSharePanel();
+    if (!silent) toast('공유 방을 나왔어요. 내 기기 기록으로 돌아왔습니다.');
+  }
+
+  function joinRoomFromInput() {
+    var input = document.getElementById('share-room');
+    var value = input ? String(input.value || '').trim() : '';
+    if (!value) {
+      toast('방 ID나 공유 링크를 넣어 주세요.');
+      return;
+    }
+    var match = value.match(/[?&]room=([^&]+)/);
+    if (match) value = match[1];
+    var room = normalizeRoomId(value);
+    if (!room) {
+      toast('방 ID는 영문 소문자·숫자·- 로 되어 있어요.');
+      return;
+    }
+    startShare(room, { upload: false });
+  }
+
+  function copyShareLink() {
+    var url = shareUrlFor(shared.roomId);
+    if (!shared.roomId) return;
+    var done = function () { toast('공유 링크를 복사했어요.'); };
+    var fail = function () { toast('복사하지 못했어요. 링크를 길게 눌러 복사해 주세요.'); };
+    try {
+      if (window.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, function () { copyShareLinkFallback(url, done, fail); });
+        return;
+      }
+    } catch (e) {}
+    copyShareLinkFallback(url, done, fail);
+  }
+
+  function copyShareLinkFallback(url, done, fail) {
+    try {
+      var area = document.createElement('textarea');
+      area.value = url;
+      area.setAttribute('readonly', 'readonly');
+      area.style.position = 'fixed';
+      area.style.top = '-1000px';
+      document.body.appendChild(area);
+      area.select();
+      var ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(area);
+      if (ok) done();
+      else fail();
+    } catch (e) {
+      fail();
+    }
+  }
+
+  function sharePanelHTML() {
+    var html = '<div class="panel" id="share-panel"><h3>🔗 실시간 공유</h3>';
+    if (!shareConfigured()) {
+      html += '<p class="hint">Firebase 설정값이 비어 있어 공유를 쓸 수 없어요. ' +
+        '이 앱은 설정 없이도 이 기기에만 저장되어 동작합니다.</p></div>';
+      return html;
+    }
+
+    if (shared.busy) {
+      html += '<p class="key-state" id="share-state">공유 방에 연결하는 중…</p></div>';
+      return html;
+    }
+
+    if (shared.active) {
+      html += '<p class="key-state on" id="share-state">공유 중 · 방 ' + esc(shared.roomId) +
+        ' · ' + shared.count + '권</p>';
+      html += '<div class="key-row"><input id="share-link" class="input" type="text" readonly ' +
+        'value="' + esc(shareUrlFor(shared.roomId)) + '" aria-label="공유 링크"></div>';
+      html += '<div class="key-row key-actions">' +
+        '<button type="button" class="btn sm primary" data-action="share-copy">링크 복사</button>' +
+        '<button type="button" class="btn sm danger" data-action="share-leave">방 나가기</button>' +
+        '</div>';
+      html += '<p class="hint">이 링크를 받은 사람은 같은 책장을 보고, 추가·수정·삭제가 서로 바로 반영됩니다. ' +
+        'Gemini API 키는 공유되지 않고 각자 기기에만 저장됩니다. ' +
+        '방을 나가면 이 기기에 저장된 원래 내 책장으로 돌아갑니다.</p>';
+      if (shared.error) {
+        html += '<p class="key-state warn" id="share-error">' + esc(shared.error) + '</p>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    html += '<p class="hint">내 책장을 Firebase에 올려 링크로 함께 볼 수 있어요. ' +
+      '사진은 Firestore 문서 한도(1MB)에 맞게 자동으로 줄여 올립니다. ' +
+      '<strong>Gemini API 키는 공유되지 않습니다</strong>(이 브라우저에만 저장).</p>';
+    html += '<div class="key-row key-actions">' +
+      '<button type="button" class="btn sm primary" data-action="share-start">공유 시작 (내 책장 ' +
+      state.books.length + '권 올리기)</button></div>';
+    html += '<div class="key-row"><input id="share-room" class="input" type="text" autocomplete="off" ' +
+      'spellcheck="false" placeholder="방 ID 또는 공유 링크로 참여" aria-label="공유 방 ID"></div>';
+    html += '<div class="key-row key-actions">' +
+      '<button type="button" class="btn sm" data-action="share-join">이 방에 참여</button>';
+    var last = lastRoomId();
+    if (last) {
+      html += '<button type="button" class="btn sm" data-action="share-rejoin" data-room="' + esc(last) +
+        '">최근 방 다시 열기</button>';
+    }
+    html += '</div>';
+    if (last) {
+      html += '<p class="hint">최근 공유 방: ' + esc(last) + '</p>';
+    }
+    if (shared.error) {
+      html += '<p class="key-state warn" id="share-error">' + esc(shared.error) + '</p>';
+    }
+    html += '</div>';
+    return html;
   }
 
   /* ------------------------------------------------------------------
@@ -3643,6 +4121,8 @@
       state.lastId = snapshot.lastId;
       return result;
     }
+
+    if (shared.active) sharePushAll(state.books);
 
     state.q = '';
     state.status = '전체';
@@ -3738,6 +4218,7 @@
           state.status = '전체';
           if (els.search) els.search.value = '';
           var result = save();
+          if (shared.active) sharePushAll([]);
           setView('shelf');
           renderAll();
           toast(result.ok ? '모든 기록을 지웠어요.' : result.message);
@@ -3903,6 +4384,11 @@
         return;
       }
       if (action === 'gemini-save') { saveGeminiKeyFromInput(); return; }
+      if (action === 'share-start') { startShare(randomRoomId(), { upload: true }); return; }
+      if (action === 'share-copy') { copyShareLink(); return; }
+      if (action === 'share-leave') { stopShare(); return; }
+      if (action === 'share-join') { joinRoomFromInput(); return; }
+      if (action === 'share-rejoin') { startShare(node.getAttribute('data-room'), { upload: false }); return; }
       if (action === 'gemini-clear') { clearGeminiKeyFromUI(); return; }
       if (action === 'gemini-toggle') { toggleGeminiVisibility(); return; }
       if (action === 'export-json') { exportJSON(); return; }
@@ -3961,6 +4447,13 @@
     if (state.loadWarning) setTimeout(function () { toast(state.loadWarning); }, 400);
     setView('shelf');
     renderAll();
+
+    /* 공유 링크(?room=...)로 열렸으면 바로 실시간 공유 모드로 시작합니다. */
+    var linkedRoom = roomFromUrl();
+    if (linkedRoom) {
+      if (shareConfigured()) startShare(linkedRoom, { upload: false });
+      else setTimeout(function () { toast('공유 링크지만 Firebase 설정이 없어 이 기기 기록으로 열었어요.'); }, 500);
+    }
   }
 
   if (document.readyState === 'loading') {
