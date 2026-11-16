@@ -442,6 +442,59 @@
 
   .mini-label { display: block; margin: 0 0 5px 2px; font-size: 12px; font-weight: 800; color: var(--ink-2); }
 
+  /* ---------- 사진 올리기 화질 ---------- */
+  .qual-picker { display: flex; flex-direction: column; gap: 8px; }
+
+  .qual-option {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    padding: 11px 13px;
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    background: #FFFDFB;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .qual-option:active { opacity: .88; }
+
+  .qual-option.on {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 3px rgba(192, 112, 74, .1);
+  }
+
+  .qual-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14.5px;
+    font-weight: 800;
+    letter-spacing: -.01em;
+  }
+
+  .qual-badge {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+
+  .qual-desc {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+
+  .qual-option.on .qual-desc { color: var(--ink-2); }
+
   .guide { margin-top: 14px; padding-top: 12px; border-top: 1px solid #F4EDE4; }
   .guide summary { font-size: 13px; font-weight: 800; color: var(--accent-2); cursor: pointer; }
   .guide ol { margin: 10px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.7; color: var(--ink-2); }
@@ -1038,7 +1091,7 @@
       <h3>☁️ Cloudinary 사진 저장</h3>
       <p class="panel-note">
         사진 원본은 Cloudinary(무료 25GB)에 올리고, 앨범에는 사진 주소만 담아요.
-        연결하면 원본 화질로 보관하고 앨범도 가벼워져요.
+        연결하면 앨범이 가벼워지고, 같은 사진을 여러 기기에서 볼 수 있어요.
       </p>
       <div class="field">
         <label for="set-cloud-name">Cloud name</label>
@@ -1064,6 +1117,24 @@
         </ol>
         <p>Unsigned preset은 사진을 올리는 용도라 공개되어도 괜찮아요. 삭제·관리 권한은 없어요.</p>
       </details>
+    </section>
+
+    <section class="panel" id="panel-upload-quality">
+      <h3>📷 사진 올리기 화질</h3>
+      <p class="panel-note">앞으로 올리는 사진에 적용돼요. 이미 담아 둔 사진은 그대로 남아요.</p>
+      <div class="qual-picker" role="radiogroup" aria-label="사진 올리기 화질">
+        <button type="button" class="qual-option" id="quality-eco" role="radio"
+                aria-checked="true" data-quality="eco">
+          <span class="qual-title">용량 절약 <span class="qual-badge">추천</span></span>
+          <span class="qual-desc">긴 변 1600px로 줄여 올려요. 휴대폰에서 보기엔 충분하고 저장 공간을 아껴요.</span>
+        </button>
+        <button type="button" class="qual-option" id="quality-original" role="radio"
+                aria-checked="false" data-quality="original">
+          <span class="qual-title">원본 화질</span>
+          <span class="qual-desc">10MB 이하 사진은 그대로 올리고, 그보다 큰 사진만 긴 변 2600px로 줄여요.</span>
+        </button>
+      </div>
+      <p class="key-state" id="quality-status" aria-live="polite"></p>
     </section>
 
     <section class="panel">
@@ -1271,6 +1342,18 @@
   const UPLOAD_MAX_SIDE = 2600;
   const UPLOAD_QUALITY = 0.86;
 
+  /* 사진 올리기 화질 (설정 화면)
+     eco      = 용량 절약: 긴 변 1600px · JPEG 0.85 로 줄여 올립니다(기본).
+     original = 원본 화질: 10MB 이하는 그대로, 넘는 사진만 2600px 로 줄입니다. */
+  const UPLOAD_QUALITY_KEY = 'pickle_photo_album_upload_quality';
+  const UPLOAD_MODE_ECO = 'eco';
+  const UPLOAD_MODE_ORIGINAL = 'original';
+  const DEFAULT_UPLOAD_MODE = UPLOAD_MODE_ECO;
+  const ECO_UPLOAD_MAX_SIDE = 1600;
+  const ECO_UPLOAD_QUALITY = 0.85;
+  /* 이미 1600px 이하이면서 이만큼 가벼우면 다시 인코딩하지 않고 그대로 올립니다. */
+  const ECO_KEEP_BYTES = 400 * 1024;
+
   /* Cloudinary 없이 이 기기에만 담을 때: 긴 변 1600px + 480px 썸네일 */
   const LOCAL_PHOTO_MAX_SIDE = 1600;
   const LOCAL_PHOTO_QUALITY = 0.82;
@@ -1296,7 +1379,8 @@
     saving: false,
     lb: null,          /* { dayId, index } */
     storageMode: '',
-    storageError: ''
+    storageError: '',
+    uploadQuality: ''  /* '' = 아직 안 읽음 → localStorage 에서 읽습니다 */
   };
 
   const local = { days: [] };   /* 이 기기에만 있는 앨범 (혼자 모드) */
@@ -1393,6 +1477,9 @@
     btnSaveCloud: $('#btn-save-cloud'),
     btnResetCloud: $('#btn-reset-cloud'),
     cloudStatus: $('#cloud-status'),
+
+    qualityOptions: Array.prototype.slice.call(document.querySelectorAll('.qual-option')),
+    qualityStatus: $('#quality-status'),
 
     setNickname: $('#set-nickname'),
     btnSaveNick: $('#btn-save-nick'),
@@ -1952,17 +2039,56 @@
 
   function extractExifDate(buffer) { return extractExifTaken(buffer).date; }
 
-  /* 10MB 가 넘는 사진은 긴 변 2600px JPEG 로 한 번 줄여 올립니다. */
-  async function prepareUploadBlob(file) {
+  /* ---------------------------------------------------------------- 올리기 화질 */
+  function normalizeUploadQuality(value) {
+    const text = String(value == null ? '' : value).trim().toLowerCase();
+    return text === UPLOAD_MODE_ORIGINAL ? UPLOAD_MODE_ORIGINAL : DEFAULT_UPLOAD_MODE;
+  }
+
+  function readUploadQuality() {
+    try { return normalizeUploadQuality(localStorage.getItem(UPLOAD_QUALITY_KEY) || ''); }
+    catch (e) { return DEFAULT_UPLOAD_MODE; }
+  }
+
+  /* 지금 고른 화질: 'eco' | 'original' */
+  function uploadQuality() {
+    if (!state.uploadQuality) state.uploadQuality = readUploadQuality();
+    return state.uploadQuality;
+  }
+
+  function saveUploadQuality(mode) {
+    const next = normalizeUploadQuality(mode);
+    state.uploadQuality = next;
+    try { localStorage.setItem(UPLOAD_QUALITY_KEY, next); } catch (e) {}
+    return next;
+  }
+
+  /* 이 사진을 다시 인코딩해야 하는지 (긴 변·용량은 열어 봐야 알 수 있습니다). */
+  function shouldCompress(bytes) { return toInt(bytes) > UPLOAD_DIRECT_LIMIT; }
+
+  /* 사진을 올리기 전에 한 번 다듬습니다.
+     eco      : 긴 변 1600px·0.85 JPEG 로 줄입니다(이미 작고 가벼우면 그대로).
+     original : 10MB 이하는 그대로, 넘는 사진만 긴 변 2600px 로 줄입니다. */
+  async function prepareUploadBlob(file, mode) {
     if (!file) throw new Error('no-file');
-    if (file.size <= UPLOAD_DIRECT_LIMIT) return { blob: file, width: 0, height: 0, compressed: false };
-    const source = await decodeImage(file, UPLOAD_MAX_SIDE + 400);
+    const quality = normalizeUploadQuality(mode || uploadQuality());
+    const eco = quality === UPLOAD_MODE_ECO;
+    if (!eco && file.size <= UPLOAD_DIRECT_LIMIT) {
+      return { blob: file, width: 0, height: 0, compressed: false, quality: quality };
+    }
+    const maxSide = eco ? ECO_UPLOAD_MAX_SIDE : UPLOAD_MAX_SIDE;
+    const source = await decodeImage(file, maxSide + 400);
     const width = source.width || source.naturalWidth || 0;
     const height = source.height || source.naturalHeight || 0;
     if (!width || !height) { closeSource(source); throw new Error('empty-image'); }
-    const out = await canvasBlob(source, width, height, UPLOAD_MAX_SIDE, UPLOAD_QUALITY, 'image/jpeg');
+    if (eco && Math.max(width, height) <= ECO_UPLOAD_MAX_SIDE && file.size <= ECO_KEEP_BYTES) {
+      closeSource(source);
+      return { blob: file, width: width, height: height, compressed: false, quality: quality };
+    }
+    const out = await canvasBlob(source, width, height, maxSide,
+      eco ? ECO_UPLOAD_QUALITY : UPLOAD_QUALITY, 'image/jpeg');
     closeSource(source);
-    return { blob: out.blob, width: out.width, height: out.height, compressed: true };
+    return { blob: out.blob, width: out.width, height: out.height, compressed: true, quality: quality };
   }
 
   /* Cloudinary 없이 이 기기에 담을 때: 긴 변 1600px + 480px 썸네일 data URL */
@@ -2769,9 +2895,20 @@
       syncInput(el.setPreset, cfg.uploadPreset);
     }
     el.cloudStatus.textContent = ready
-      ? (storedCloudinary() ? '연결됨 · ' : '기본 설정으로 연결됨 · ') + cfg.cloudName + ' 로 원본 화질 사진을 올려요.'
+      ? (storedCloudinary() ? '연결됨 · ' : '기본 설정으로 연결됨 · ') + cfg.cloudName + ' 로 사진을 올려요.'
       : '아직 연결 전 — 사진을 이 기기에만 담아요.';
     el.cloudStatus.className = 'key-state' + (ready ? ' on' : '');
+
+    const quality = uploadQuality();
+    el.qualityOptions.forEach((btn) => {
+      const on = btn.getAttribute('data-quality') === quality;
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    el.qualityStatus.textContent = quality === UPLOAD_MODE_ECO
+      ? '지금은 긴 변 1600px로 줄여 올려요 · 저장 공간을 아껴요'
+      : '지금은 원본 화질로 올려요 · 10MB가 넘는 사진만 줄여요';
+    el.qualityStatus.className = 'key-state on';
 
     syncInput(el.setNickname, profile.nickname);
     el.nickStatus.textContent = profile.nickname
@@ -2901,8 +3038,11 @@
     el.exifHint.textContent = '';
     el.exifHint.className = 'hint';
     el.btnDeleteDay.classList.toggle('hidden', !day);
+    const qualityNote = uploadQuality() === UPLOAD_MODE_ECO
+      ? '긴 변 1600px로 줄여'
+      : '원본 화질로';
     el.draftHint.textContent = hasCloudinary()
-      ? '사진은 Cloudinary에 원본 화질로 올라가요.'
+      ? '사진은 Cloudinary에 ' + qualityNote + ' 올라가요.'
       : 'Cloudinary를 연결하기 전이라 사진을 이 기기에만 담아요. (설정에서 연결할 수 있어요)';
     renderDraft();
     el.sheet.classList.remove('hidden');
@@ -3000,8 +3140,17 @@
 
   async function buildPhoto(item) {
     const cfg = cloudinaryConfig();
+    /* 촬영일은 줄이기 전 원본 파일 바이트에서 읽습니다.
+       (Canvas 로 다시 인코딩하면 EXIF 가 사라지므로 여기서 한 번 더 확인해요.) */
+    if (item && item.file && !item.takenAt) {
+      try {
+        const bytes = await readPhotoBytes(item.file);
+        const exif = extractExifTaken(bytes);
+        if (exif.date) item.takenAt = exif.date + (exif.time ? 'T' + exif.time : '');
+      } catch (e) { /* 촬영일 없이 올립니다 */ }
+    }
     if (cfg.cloudName && cfg.uploadPreset) {
-      const prepared = await prepareUploadBlob(item.file);
+      const prepared = await prepareUploadBlob(item.file, uploadQuality());
       item.status = 'uploading';
       item.progress = 1;
       updateDraftProgress(item);
@@ -3396,6 +3545,17 @@
     el.btnSaveCloud.addEventListener('click', saveCloudinaryFromForm);
     el.btnResetCloud.addEventListener('click', resetCloudinaryToDefault);
 
+    /* ---- 설정: 올리기 화질 ---- */
+    el.qualityOptions.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mode = saveUploadQuality(btn.getAttribute('data-quality'));
+        renderSettings();
+        toast(mode === UPLOAD_MODE_ECO
+          ? '이제 사진을 1600px로 줄여 올려요.'
+          : '이제 사진을 원본 화질로 올려요.');
+      });
+    });
+
     /* ---- 설정: 닉네임 ---- */
     el.btnSaveNick.addEventListener('click', () => {
       const value = clampText(el.setNickname.value, MAX_AUTHOR);
@@ -3572,6 +3732,8 @@
     limits: {
       uploadDirectBytes: UPLOAD_DIRECT_LIMIT,
       uploadMaxSide: UPLOAD_MAX_SIDE,
+      ecoMaxSide: ECO_UPLOAD_MAX_SIDE,
+      ecoKeepBytes: ECO_KEEP_BYTES,
       localMaxSide: LOCAL_PHOTO_MAX_SIDE
     },
     readPersisted: readPersisted,
@@ -3583,7 +3745,10 @@
     sanitizeAlbum: sanitizeAlbum,
     cloudinaryTransform: cloudinaryTransform,
     prepareUploadBlob: prepareUploadBlob,
-    shouldCompress: (bytes) => toInt(bytes) > UPLOAD_DIRECT_LIMIT,
+    uploadQuality: uploadQuality,
+    saveUploadQuality: saveUploadQuality,
+    normalizeUploadQuality: normalizeUploadQuality,
+    shouldCompress: shouldCompress,
     cloudinaryConfig: cloudinaryConfig,
     nickname: nickname,
     openDaySheet: openDaySheet,
