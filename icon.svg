@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="내 책장">
+  <rect width="512" height="512" rx="113" fill="#C0704A"/>
+  <g fill="#FAF6F0">
+    <rect x="170.5" y="205.8" width="37.9" height="153.6" rx="7.7"/>
+    <rect x="211.5" y="168.9" width="45.1" height="190.5" rx="7.7"/>
+    <rect x="259.6" y="219.2" width="36.9" height="140.2" rx="7.7"/>
+    <rect x="299.5" y="188.4" width="41.9" height="171" rx="7.7"/>
+    <rect x="124.4" y="359.4" width="263.1" height="21.5" rx="10.8"/>
+  </g>
+  <g fill="#C0704A">
+    <rect x="170.5" y="224.2" width="37.9" height="6.7" rx="3.1"/>
+    <rect x="259.6" y="237.6" width="36.9" height="6.7" rx="3.1"/>
+    <rect x="299.5" y="206.8" width="41.9" height="6.7" rx="3.1"/>
+  </g>
+</svg>
