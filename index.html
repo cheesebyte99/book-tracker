@@ -5023,6 +5023,7 @@
     var items = sanitizeGallery(wanted);
     var keep = {};
     var chain = Promise.resolve();
+    shared.lastOps = { total: items.length, writes: 0, deletes: 0, key: key };
     for (i = 0; i < items.length; i++) {
       (function (item) {
         keep[String(item.id)] = true;
@@ -5036,6 +5037,7 @@
               return null;
             }
             var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, doc.id);
+            shared.lastOps.writes += 1;
             return mod.setDoc(ref, doc).catch(galleryWriteError);
           });
         });
@@ -5051,6 +5053,7 @@
         chain = chain.then(function () {
           if (!shared.active || shared.roomId !== room) return null;
           var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, oldId);
+          shared.lastOps.deletes += 1;
           return mod.deleteDoc(ref).catch(galleryWriteError);
         });
       })(gone[g]);
@@ -5083,6 +5086,12 @@
     }).then(function () {
       /* 사진첩은 책 아래 하위 컬렉션(books/{id}/gallery)에 사진 한 장씩 담습니다.
          문서 한도(1MB)를 사진 한 장이 나눠 쓰지 않아 장수 제한이 사실상 없습니다. */
+      shared.lastSync = {
+        id: String(book.id),
+        raw: (book.gallery || []).length,
+        clean: sanitizeGallery(book.gallery).length,
+        current: (shared.galleries[String(book.id)] || []).length
+      };
       return syncGalleryItems(book.id, book.gallery || [], shared.galleries[String(book.id)] || []);
     }).catch(function (err) {
       shared.error = shareErrorMessage(err);
@@ -5969,6 +5978,8 @@
         error: shared.error,
         galleryError: shared.galleryError,
         galleryBlocked: shared.galleryBlocked,
+        lastSync: shared.lastSync || null,
+        lastOps: shared.lastOps || null,
         books: [],
         galleries: {}
       };
