@@ -1655,9 +1655,11 @@
   var GALLERY_LONG_SIDE = 1000;
   var GALLERY_QUALITY = 0.78;
   var GALLERY_TARGET_CHARS = 250000;   /* 한 장 ~180KB */
-  var GALLERY_MAX_CHARS = 420000;      /* 한 장 최대 ~300KB */
+  var GALLERY_MAX_CHARS = 600000;      /* 한 장 최대 ~450KB — 글자가 빽빽한 페이지도 살립니다 */
+  /* 위에서부터 차례로 줄여 보고 목표(250000자) 아래로 내려오면 멈춥니다.
+     끝까지 가도 목표에 못 미치면 마지막 두 단계(640·560px)로 최대한 담아 봅니다. */
   var GALLERY_STEPS = [[1000, 0.78], [1000, 0.7], [960, 0.66], [900, 0.62],
-                       [820, 0.58], [760, 0.54], [700, 0.5]];
+                       [820, 0.58], [760, 0.54], [700, 0.5], [640, 0.48], [560, 0.45]];
   /* 사진첩 글자 수 합계가 이보다 넘으면 저장 공간이 빠듯하다고 알립니다. (약 2.7MB) */
   var GALLERY_WARN_CHARS = 2700000;
 
@@ -1738,7 +1740,7 @@
 
   /* 사진첩 사진 파일 → 저장용 data URL (긴 변 1000px, JPEG 0.78 — 너무 크면 조금씩 더 줄임) */
   function compressGalleryImage(file) {
-    return decodeImage(file).then(function (source) {
+    return decodeImage(file, BITMAP_PHOTO_MAX_DIM).then(function (source) {
       var width = source.width || source.naturalWidth || 0;
       var height = source.height || source.naturalHeight || 0;
       if (!width || !height) {
@@ -2355,43 +2357,107 @@
       function cleanup() {
         if (url) { try { URL.revokeObjectURL(url); } catch (e) {} url = ''; }
       }
+      /* blob URL 로는 못 여는 브라우저가 있습니다(앱 안의 WebView 등).
+         그때는 파일을 data URL 로 읽어 마지막으로 한 번 더 시도합니다. */
+      function decodeViaReader() {
+        var reader;
+        try { reader = new FileReader(); } catch (e1) { reject(new Error('decode-failed')); return; }
+        reader.onload = function () {
+          var fallback = new Image();
+          fallback.onload = function () { resolve(fallback); };
+          fallback.onerror = function () { reject(new Error('decode-failed')); };
+          try { fallback.src = String(reader.result || ''); }
+          catch (e2) { reject(new Error('decode-failed')); }
+        };
+        reader.onerror = function () { reject(new Error('read-failed')); };
+        try { reader.readAsDataURL(file); } catch (e3) { reject(new Error('read-failed')); }
+      }
       var img = new Image();
       img.onload = function () { cleanup(); resolve(img); };
-      img.onerror = function () { cleanup(); reject(new Error('decode-failed')); };
+      img.onerror = function () { cleanup(); decodeViaReader(); };
       try {
         url = URL.createObjectURL(file);
         img.src = url;
       } catch (err) {
         cleanup();
-        var reader = new FileReader();
-        reader.onload = function () {
-          var fallback = new Image();
-          fallback.onload = function () { resolve(fallback); };
-          fallback.onerror = function () { reject(new Error('decode-failed')); };
-          fallback.src = String(reader.result || '');
-        };
-        reader.onerror = function () { reject(new Error('read-failed')); };
-        reader.readAsDataURL(file);
+        decodeViaReader();
       }
     });
   }
 
-  /* 가능하면 createImageBitmap 을 써서 폰 사진의 회전 정보(EXIF)까지 바로 반영합니다. */
-  function decodeImage(file) {
-    if (!window.createImageBitmap) return decodeWithElement(file);
-    return new Promise(function (resolve, reject) {
-      var pending = null;
+  /* 큰 폰 사진(예: 8000px)을 통째로 열면 Android WebView 에서는 메모리가 모자라
+     디코딩이 실패합니다. createImageBitmap 의 resizeWidth 로 처음부터 줄여서 엽니다.
+     resize 옵션을 모르는 브라우저는 옵션을 그냥 무시하고 원본 크기로 열어 버리므로,
+     (오히려 더 위험합니다) 아주 작은 캔버스로 지원 여부를 한 번만 확인해 둡니다. */
+  var BITMAP_RESIZE_MIN_BYTES = 3 * 1024 * 1024;  /* 이보다 큰 파일만 미리 줄입니다 */
+  var BITMAP_PHOTO_MAX_DIM = 1400;                /* 표지·사진첩: 긴 변 1000px 까지 쓰므로 충분 */
+  var BITMAP_AI_MAX_DIM = 1600;                   /* AI 표지 인식용 1200px 사본까지 그릴 때 */
+
+  var bitmapResizeSupport = null;
+
+  function supportsBitmapResize() {
+    if (bitmapResizeSupport) return bitmapResizeSupport;
+    bitmapResizeSupport = new Promise(function (resolve) {
+      var settled = false;
+      function done(value) {
+        if (settled) return;
+        settled = true;
+        resolve(!!value);
+      }
+      if (!window.createImageBitmap) { done(false); return; }
+      var canvas = null;
       try {
-        pending = window.createImageBitmap(file, { imageOrientation: 'from-image' });
-      } catch (err) {
-        decodeWithElement(file).then(resolve, reject);
-        return;
+        canvas = document.createElement('canvas');
+        canvas.width = 8;
+        canvas.height = 4;
+      } catch (e) { done(false); return; }
+      if (!canvas.toBlob) { done(false); return; }
+      /* 응답이 아주 늦으면 지원하지 않는 것으로 보고 원래 방식대로 갑니다. */
+      setTimeout(function () { done(false); }, 1500);
+      try {
+        canvas.toBlob(function (blob) {
+          if (!blob) { done(false); return; }
+          var pending = null;
+          try { pending = window.createImageBitmap(blob, { resizeWidth: 4, resizeQuality: 'high' }); }
+          catch (err) { done(false); return; }
+          if (!pending || typeof pending.then !== 'function') { done(false); return; }
+          pending.then(function (bitmap) {
+            var ok = !!bitmap && bitmap.width === 4;
+            if (bitmap && bitmap.close) { try { bitmap.close(); } catch (e2) {} }
+            done(ok);
+          }, function () { done(false); });
+        }, 'image/png');
+      } catch (e3) { done(false); }
+    });
+    return bitmapResizeSupport;
+  }
+
+  function decodeWithBitmap(file, targetMaxDim) {
+    return new Promise(function (resolve, reject) {
+      var options = { imageOrientation: 'from-image' };
+      if (targetMaxDim > 0 && file && file.size > BITMAP_RESIZE_MIN_BYTES) {
+        /* 폭만 줄이지만 세로 사진도 그만큼 함께 작아집니다(8000px → 1400px 선). */
+        options.resizeWidth = Math.round(targetMaxDim);
+        options.resizeQuality = 'high';
       }
-      if (!pending || typeof pending.then !== 'function') {
-        decodeWithElement(file).then(resolve, reject);
-        return;
-      }
-      pending.then(resolve, function () { decodeWithElement(file).then(resolve, reject); });
+      var pending = null;
+      try { pending = window.createImageBitmap(file, options); }
+      catch (err) { reject(new Error('decode-failed')); return; }
+      if (!pending || typeof pending.then !== 'function') { reject(new Error('decode-failed')); return; }
+      pending.then(resolve, function () { reject(new Error('decode-failed')); });
+    });
+  }
+
+  /* 가능하면 createImageBitmap 을 써서 폰 사진의 회전 정보(EXIF)까지 바로 반영하고,
+     targetMaxDim 이 있으면 그보다 큰 사진은 처음부터 줄여서 엽니다(메모리 절약). */
+  function decodeImage(file, targetMaxDim) {
+    var limit = targetMaxDim > 0 ? Math.round(targetMaxDim) : 0;
+    if (!window.createImageBitmap) return decodeWithElement(file);
+    return supportsBitmapResize().then(function (canResize) {
+      return decodeWithBitmap(file, canResize ? limit : 0).then(null, function () {
+        /* HEIC 처럼 createImageBitmap 이 못 여는 사진은 <img> 로 한 번 더 시도합니다. */
+        return decodeWithElement(file);
+      });
     });
   }
 
@@ -2419,7 +2485,8 @@
      withAi 면 같은 디코딩 결과에서 긴 변 1200px 사본(ai)도 한 장 더 그립니다.
      원본을 두 번 열지 않고, ai 사본은 저장(localStorage)에 넣지 않습니다. */
   function compressPhotoForStore(file, withAi) {
-    return decodeImage(file).then(function (source) {
+    /* AI 사본(1200px)까지 그릴 때는 조금 더 큰 원본이 필요합니다. */
+    return decodeImage(file, withAi ? BITMAP_AI_MAX_DIM : BITMAP_PHOTO_MAX_DIM).then(function (source) {
       var width = source.width || source.naturalWidth || 0;
       var height = source.height || source.naturalHeight || 0;
       if (!width || !height) {
@@ -3578,6 +3645,19 @@
     });
   }
 
+  /* 카카오톡·네이버·인스타그램처럼 앱 안에서 여는 브라우저(WebView)인지.
+     그런 브라우저는 큰 사진을 열지 못하거나 파일 선택이 막히기도 합니다. */
+  function isInAppBrowser() {
+    var ua = String((typeof navigator !== 'undefined' && navigator && navigator.userAgent) || '');
+    if (/KAKAOTALK|NAVER\(|DaumApps|Instagram|FBAN|FBAV|Line\/|Twitter|Snapchat|Threads/i.test(ua)) return true;
+    return /Android/i.test(ua) && /;\s*wv\)/.test(ua);
+  }
+
+  function inAppBrowserHint() {
+    if (!isInAppBrowser()) return '';
+    return ' 앱 안의 브라우저라면 크롬이나 삼성 인터넷으로 열어 다시 해 보세요.';
+  }
+
   function handlePhotoFile(file) {
     if (!file) return;
 
@@ -3633,10 +3713,14 @@
     }).catch(function (err) {
       state.photoBusy = false;
       renderPhoto();
+      var reason = String((err && err.message) || '');
+      /* 왜 안 됐는지에 따라 안내를 달리합니다. */
       if (isHeicFile(file)) {
         toast('아이폰 HEIC 사진은 브라우저에서 열지 못할 수 있어요. JPG로 바꾼 사진을 골라 주세요.');
-      } else if (err && err.message === 'too-big') {
+      } else if (reason === 'too-big') {
         toast('사진을 충분히 줄이지 못했어요. 다른 사진으로 다시 해 보세요.');
+      } else if (reason === 'decode-failed' || reason === 'read-failed' || reason === 'empty-image') {
+        toast('사진을 열지 못했어요.' + inAppBrowserHint());
       } else {
         toast('사진을 읽지 못했어요. 다른 사진으로 다시 해 보세요.');
       }
@@ -3753,7 +3837,9 @@
     renderAlbum();
 
     var added = 0;
-    var failed = 0;
+    var failedHeic = 0;
+    var failedBig = 0;
+    var failedDecode = 0;
     var chain = Promise.resolve();
     accepted.forEach(function (one) {
       chain = chain.then(function () {
@@ -3763,8 +3849,10 @@
           }]);
           added += 1;
         }, function (err) {
-          failed += 1;
-          if (err && err.message !== 'too-big') heic = heic || isHeicFile(one);
+          var reason = String((err && err.message) || '');
+          if (isHeicFile(one)) failedHeic += 1;
+          else if (reason === 'too-big') failedBig += 1;
+          else failedDecode += 1;
         });
       }).then(function () {
         state.galleryDone += 1;
@@ -3780,7 +3868,9 @@
 
       var bits = [];
       if (added) bits.push('사진 ' + added + '장을 사진첩에 담았어요. (저장을 누르면 반영)');
-      if (failed) bits.push(failed + '장은 읽지 못했어요' + (heic ? ' — 아이폰 HEIC는 JPG로 바꿔 주세요' : ''));
+      if (failedHeic) bits.push(failedHeic + '장은 아이폰 HEIC 사진이라 열지 못했어요 — JPG로 바꿔 주세요.');
+      if (failedBig) bits.push(failedBig + '장은 글자가 너무 빽빽해 줄이지 못했어요 — 조금 멀리서 다시 찍어 주세요.');
+      if (failedDecode) bits.push(failedDecode + '장은 사진을 열지 못했어요.' + inAppBrowserHint());
       if (skipped) bits.push(skipped + '장은 ' + GALLERY_MAX_COUNT + '장 한도로 건너뛰었어요');
       if (!bits.length) bits.push('사진을 담지 못했어요. 다른 사진으로 다시 해 보세요.');
       toast(bits.join(' '));
@@ -5237,6 +5327,9 @@
     serializeGallery: serializeGallery,
     normalizeGalleryPhoto: normalizeGalleryPhoto,
     compressGalleryImage: compressGalleryImage,
+    decodeImage: decodeImage,
+    decodeWithElement: decodeWithElement,
+    isInAppBrowser: isInAppBrowser,
     prepareShareDoc: prepareShareDoc,
     writeShareDoc: writeShareDoc,
     SHARE_DOC_MAX_CHARS: SHARE_DOC_MAX_CHARS,
