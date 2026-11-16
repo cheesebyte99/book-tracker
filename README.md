@@ -5,6 +5,7 @@
 
 - 앱: https://cheesebyte99.github.io/book-tracker/
 - 원본: `book-tracker/book_tracker_app.html` (로컬 폴더의 같은 앱)
+- 함께 쓰는 캘린더: https://cheesebyte99.github.io/book-tracker/calendar/ (원본 `shared-calendar/index.html`)
 
 ## 휴대폰에 앱처럼 설치
 
@@ -32,6 +33,7 @@
 | `icon.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` | 앱 아이콘 (maskable 대응) |
 | `apple-touch-icon.png` | iOS 홈 화면 아이콘 |
 | `.nojekyll` | GitHub Pages 가 Jekyll 처리 없이 그대로 서빙하도록 |
+| `calendar/index.html` | 우리들의 캘린더 앱 본체 (같은 저장소의 하위 경로로 배포) |
 
 ## 앱 기능
 
@@ -51,10 +53,19 @@
   localStorage 에만 있고, Firestore 로 보내는 문서에는 들어가지 않습니다.
 - 사진은 Firestore 문서 한도(1MB)에 맞게 필요하면 자동으로 다시 줄여 올립니다. 아주 큰 사진은 공유본에서 빠집니다.
 
+## 📅 우리들의 캘린더
+
+`공유 캘린더` 도 같은 저장소의 `/calendar/` 경로에 함께 배포합니다.
+
+- 앱: https://cheesebyte99.github.io/book-tracker/calendar/
+- 원본: `shared-calendar/index.html` (Firebase `jaeyeon-life` 프로젝트, `rooms/{방ID}/events`)
+- 방 링크: `https://cheesebyte99.github.io/book-tracker/calendar/?room=<방ID>`
+
 ## 갱신 방법
 
 ```bash
 cp ../book-tracker/book_tracker_app.html index.html   # 앱 수정 후
+cp ../shared-calendar/index.html calendar/index.html  # 캘린더 수정 후
 git add -A && git commit -m "앱 갱신" && git push
 ```
 
