@@ -4669,6 +4669,14 @@
     galleryError: ''
   };
 
+  var debugLog = [];
+  function dbg(msg, extra) {
+    try {
+      debugLog.push(new Date().toISOString().slice(11, 23) + ' ' + msg + (extra == null ? '' : ' ' + extra));
+      if (debugLog.length > 300) debugLog.shift();
+    } catch (e) {}
+  }
+
   function shareConfigured() {
     var key = String(FIREBASE_CONFIG.apiKey || '');
     var project = String(FIREBASE_CONFIG.projectId || '');
@@ -4920,6 +4928,7 @@
   }
 
   function galleryWriteError(err) {
+    dbg('gallery error', String((err && (err.code || err.message)) || err));
     shared.galleryError = shareErrorMessage(err);
     if (isPermissionDenied(err)) {
       shared.galleryBlocked = true;
@@ -5026,6 +5035,8 @@
     var items = sanitizeGallery(wanted);
     var keep = {};
     var jobs = [];
+    dbg('sync start', key + ' wanted=' + (wanted || []).length + ' items=' + items.length +
+      ' have=' + now.length + ' ids=' + items.map(function (x) { return x.id; }).join(','));
     for (var j = 0; j < items.length; j++) {
       (function (item) {
         keep[String(item.id)] = true;
@@ -5038,7 +5049,9 @@
           }
           if (!shared.active || shared.roomId !== room) return null;
           var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, doc.id);
-          return mod.setDoc(ref, doc).catch(galleryWriteError);
+          dbg('setDoc gallery', key + '/' + doc.id + ' len=' + doc.dataUrl.length);
+          return mod.setDoc(ref, doc).then(function (r) { dbg('setDoc ok', key + '/' + doc.id); return r; })
+            .catch(galleryWriteError);
         }));
       })(items[j]);
     }
@@ -5051,6 +5064,7 @@
       (function (oldId) {
         if (!shared.active || shared.roomId !== room) return;
         var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, oldId);
+        dbg('deleteDoc gallery', key + '/' + oldId);
         jobs.push(mod.deleteDoc(ref).catch(galleryWriteError));
       })(gone[g]);
     }
@@ -5063,6 +5077,7 @@
     var mod = fs.mod;
     /* 사진첩은 책 아래 하위 컬렉션(books/{id}/gallery)에 사진 한 장씩 담습니다.
        부모 문서와 서로 다른 문서라, 부모 저장 응답을 기다리지 않고 바로 올립니다. */
+    dbg('push book', String(book.id) + ' gallery=' + (book.gallery || []).length);
     var galleryJob = syncGalleryItems(book.id, book.gallery || [],
                                       shared.galleries[String(book.id)] || []);
     var bookJob = prepareShareDoc(book).then(function (prepared) {
@@ -5948,6 +5963,7 @@
     syncGalleryItems: syncGalleryItems,
     shareGalleryPath: SHARE_GALLERY_COLLECTION,
     SHARE_GALLERY_MAX_CHARS: SHARE_GALLERY_MAX_CHARS,
+    debugLog: function () { return debugLog.slice(); },
     shareState: function () {
       var out = {
         active: shared.active,
