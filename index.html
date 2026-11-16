@@ -5962,6 +5962,27 @@
     syncGalleryItems: syncGalleryItems,
     shareGalleryPath: SHARE_GALLERY_COLLECTION,
     SHARE_GALLERY_MAX_CHARS: SHARE_GALLERY_MAX_CHARS,
+    shareState: function () {
+      var out = {
+        active: shared.active,
+        roomId: shared.roomId,
+        error: shared.error,
+        galleryError: shared.galleryError,
+        galleryBlocked: shared.galleryBlocked,
+        books: [],
+        galleries: {}
+      };
+      for (var key in shared.rawBooks) {
+        if (Object.prototype.hasOwnProperty.call(shared.rawBooks, key)) out.books.push(key);
+      }
+      for (var gkey in shared.galleries) {
+        if (!Object.prototype.hasOwnProperty.call(shared.galleries, gkey)) continue;
+        out.galleries[gkey] = shared.galleries[gkey].map(function (item) {
+          return item.id + ':' + (item.note || '');
+        });
+      }
+      return out;
+    },
     cardHTML: cardHTML,
     save: save,
     load: load,
