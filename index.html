@@ -4795,6 +4795,10 @@
     });
   }
 
+  function docChars(doc) {
+    try { return JSON.stringify(doc).length; } catch (e) { return 0; }
+  }
+
   /* 부모 문서(책) — 글자·표지만. 1MB 한도 안에 넉넉히 들어갑니다. */
   function prepareShareDoc(book) {
     var doc = shareDocFor(book);
@@ -5018,30 +5022,25 @@
     var room = shared.roomId;
     var now = current || shared.galleries[key] || [];
     var have = {};
-    var i;
-    for (i = 0; i < now.length; i++) have[String(now[i].id)] = now[i];
+    for (var i = 0; i < now.length; i++) have[String(now[i].id)] = now[i];
     var items = sanitizeGallery(wanted);
     var keep = {};
-    var chain = Promise.resolve();
-    shared.lastOps = { total: items.length, writes: 0, deletes: 0, key: key };
-    for (i = 0; i < items.length; i++) {
+    var jobs = [];
+    for (var j = 0; j < items.length; j++) {
       (function (item) {
         keep[String(item.id)] = true;
         var old = have[String(item.id)];
         if (old && old.dataUrl === item.dataUrl && String(old.note || '') === String(item.note || '')) return;
-        chain = chain.then(function () {
+        jobs.push(prepareGalleryDoc(item, mod).then(function (doc) {
+          if (!doc) {
+            toast('사진첩 사진 한 장은 너무 커서 공유본에서 뺐어요.');
+            return null;
+          }
           if (!shared.active || shared.roomId !== room) return null;
-          return prepareGalleryDoc(item, mod).then(function (doc) {
-            if (!doc) {
-              toast('사진첩 사진 한 장은 너무 커서 공유본에서 뺐어요.');
-              return null;
-            }
-            var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, doc.id);
-            shared.lastOps.writes += 1;
-            return mod.setDoc(ref, doc).catch(galleryWriteError);
-          });
-        });
-      })(items[i]);
+          var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, doc.id);
+          return mod.setDoc(ref, doc).catch(galleryWriteError);
+        }));
+      })(items[j]);
     }
     var gone = [];
     for (var oldId in have) {
@@ -5050,54 +5049,33 @@
     }
     for (var g = 0; g < gone.length; g++) {
       (function (oldId) {
-        chain = chain.then(function () {
-          if (!shared.active || shared.roomId !== room) return null;
-          var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, oldId);
-          shared.lastOps.deletes += 1;
-          return mod.deleteDoc(ref).catch(galleryWriteError);
-        });
+        if (!shared.active || shared.roomId !== room) return;
+        var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, oldId);
+        jobs.push(mod.deleteDoc(ref).catch(galleryWriteError));
       })(gone[g]);
     }
-    return chain;
-  }
-
-  function withEmptyPhoto(doc) {
-    var copy = {};
-    for (var key in doc) {
-      if (Object.prototype.hasOwnProperty.call(doc, key)) copy[key] = doc[key];
-    }
-    copy.photo = '';
-    return copy;
-  }
-
-  function docChars(doc) {
-    try { return JSON.stringify(doc).length; } catch (e) { return 0; }
+    return Promise.all(jobs);
   }
 
   function sharePushBook(book) {
     if (!shared.active || !shared.fs) return Promise.resolve();
     var fs = shared.fs;
     var mod = fs.mod;
-    return prepareShareDoc(book).then(function (prepared) {
+    /* 사진첩은 책 아래 하위 컬렉션(books/{id}/gallery)에 사진 한 장씩 담습니다.
+       부모 문서와 서로 다른 문서라, 부모 저장 응답을 기다리지 않고 바로 올립니다. */
+    var galleryJob = syncGalleryItems(book.id, book.gallery || [],
+                                      shared.galleries[String(book.id)] || []);
+    var bookJob = prepareShareDoc(book).then(function (prepared) {
       if (prepared.photoDropped) toast('사진이 너무 커서 공유본에서는 뺐어요.');
       var doc = prepared.doc;
       doc.updatedAt = mod.serverTimestamp();
       return writeShareDoc(mod, fs, book, doc);
-    }).then(function () {
-      /* 사진첩은 책 아래 하위 컬렉션(books/{id}/gallery)에 사진 한 장씩 담습니다.
-         문서 한도(1MB)를 사진 한 장이 나눠 쓰지 않아 장수 제한이 사실상 없습니다. */
-      shared.lastSync = {
-        id: String(book.id),
-        raw: (book.gallery || []).length,
-        clean: sanitizeGallery(book.gallery).length,
-        current: (shared.galleries[String(book.id)] || []).length
-      };
-      return syncGalleryItems(book.id, book.gallery || [], shared.galleries[String(book.id)] || []);
     }).catch(function (err) {
       shared.error = shareErrorMessage(err);
       toast('공유 저장 실패: ' + shared.error);
       if (state.view === 'backup') renderBackup();
     });
+    return Promise.all([bookJob, galleryJob]);
   }
 
   function writeShareDoc(mod, fs, book, doc) {
@@ -5247,11 +5225,10 @@
       shareSubscribe();
       renderAll();
       if (state.view === 'backup') syncSharePanel();
-      if (upload) return sharePushAll(upload);
-      return null;
-    }).then(function () {
+      if (upload) sharePushAll(upload);
       toast(upload ? '공유를 시작했어요. 링크를 복사해 보내 보세요.' : '공유 책장에 연결했어요.');
       if (state.view === 'backup') syncSharePanel();
+      return null;
     }).catch(function (err) {
       shared.active = false;
       shared.roomId = '';
@@ -5978,8 +5955,6 @@
         error: shared.error,
         galleryError: shared.galleryError,
         galleryBlocked: shared.galleryBlocked,
-        lastSync: shared.lastSync || null,
-        lastOps: shared.lastOps || null,
         books: [],
         galleries: {}
       };
