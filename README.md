@@ -1,7 +1,8 @@
 # 내 책장 · 독서 정리
 
 읽은 책과 읽고 싶은 책을 정리하는 휴대폰용 독서 기록 웹앱입니다.
-파일 하나(`index.html`)로 동작하고, 기록은 서버가 아니라 **이 기기 브라우저(localStorage)** 에만 저장됩니다.
+파일 하나(`index.html`)로 동작하고, 기록은 서버가 아니라 **이 기기 브라우저(IndexedDB)** 에만 저장됩니다.
+(예전 `localStorage` 기록은 처음 열 때 자동으로 옮겨집니다 — 사진·사진첩 포함)
 
 - 앱: https://cheesebyte99.github.io/book-tracker/
 - 원본: `book-tracker/book_tracker_app.html` (로컬 폴더의 같은 앱)
@@ -23,6 +24,17 @@
 2. 이 주소에서 `설정` → **JSON 파일 가져오기** → 병합 선택
 
 사진은 JSON에 함께 들어가고, CSV에는 들어가지 않습니다.
+
+## 저장 공간 (IndexedDB)
+
+- 책 기록은 **IndexedDB** — `pickle_book_tracker_db` → `library` → `main` 한 칸에 통째로 들어갑니다.
+  사진·사진첩이 수백 MB 쌓여도 되고, 예전 `localStorage` 의 약 5MB 한도에 걸리지 않습니다.
+- Gemini API 키(`pickle_book_tracker_gemini_key`)와 마지막 저장 시각만 `localStorage` 에 남습니다.
+- 예전 `localStorage` 기록(`pickle_book_tracker_v1`)이 있으면 처음 한 번 IndexedDB 로 옮기고,
+  다시 읽어 확인한 뒤에만 옛 사본을 지웁니다(`pickle_book_tracker_v1_migrated` 에 기록).
+- IndexedDB 를 쓸 수 없는 브라우저에서는 예전처럼 `localStorage` 로 저장하고 5MB 한도 안내도 그대로 동작합니다.
+- `백업·관리` 의 **저장 공간** 은 브라우저가 알려 주는 실제 사용량·남은 공간(`navigator.storage.estimate()`)을 보여 줍니다.
+  크롬·삼성 인터넷에서는 브라우저가 저장소를 함부로 지우지 않도록 **지속 저장** 도 조용히 요청합니다.
 
 ## 파일 구성
 
@@ -49,24 +61,26 @@
 
 - 공유 링크: `https://cheesebyte99.github.io/book-tracker/?room=<방ID>`
 - 링크를 받은 사람은 같은 책장을 보며, 추가·수정·삭제가 서로 바로 반영됩니다(onSnapshot).
-- **방 나가기** 를 누르면 이 기기에 저장된 원래 내 책장으로 돌아갑니다(공유 중에는 localStorage 를 건드리지 않음).
+- **방 나가기** 를 누르면 이 기기에 저장된 원래 내 책장으로 돌아갑니다(공유 중에는 이 기기 기록을 건드리지 않음).
 - **Gemini API 키는 절대 공유되지 않습니다.** 키는 `pickle_book_tracker_gemini_key` 로 각 기기의
   localStorage 에만 있고, Firestore 로 보내는 문서에는 들어가지 않습니다.
-- 사진은 Firestore 문서 한도(1MB)에 맞게 필요하면 자동으로 다시 줄여 올립니다. 아주 큰 사진은 공유본에서 빠집니다.
-- **책 사진첩(`gallery`)** 도 함께 공유됩니다. 문서 한도를 넘으면 사진첩 사진을 다시 줄이고, 아주 작게 줄여야 하는 사진은 공유본에서 빼며, 몇 장이 빠졌는지 알려 줍니다.
-  단, `firebase/firestore.rules` 에 `gallery` 항목이 들어간 규칙이 **게시되어 있어야** 합니다.
-  게시 전에는 사진첩만 이 기기에 남고, 글자·표지 공유는 그대로 됩니다(앱이 알아서 사진첩을 뺀 문서로 다시 써요). 게시 방법은 아래를 보세요.
+- 표지 사진은 Firestore 문서 한도(1MB)에 맞게 필요하면 자동으로 다시 줄여 올립니다. 아주 큰 사진은 공유본에서 빠집니다.
+- **📸 사진첩은 책마다 하위 컬렉션** `bookshelves/{방ID}/books/{책번호}/gallery/{사진번호}` 에 **사진 한 장씩** 올라갑니다.
+  문서 하나에 사진 한 장이라 1MB 한도와 상관없이 **장수 제한 없이** 공유되고, 사진 추가·메모 수정·삭제가
+  다른 기기에 **실시간(onSnapshot)** 으로 반영됩니다. 책을 지우면 그 책의 사진첩 문서도 함께 지워집니다.
+  부모 책 문서에는 글자·표지만 들어갑니다(예전 문서에 남아 있던 `gallery` 배열은 읽을 때만 합쳐 보여 주고, 하위 컬렉션으로 옮깁니다).
 
-### 사진첩 공유를 켜려면 (Firestore 규칙 게시)
+### Firestore 규칙 (`firebase/firestore.rules`)
 
-`firebase/firestore.rules` 의 `isValidBook` 에 `gallery` 항목 검사가 들어가 있습니다.
-Firebase 콘솔(**jaeyeon-life** → Firestore → 규칙)에 이 파일 내용을 그대로 붙여 넣고 **게시**하거나,
+이 저장소의 앱이 쓰는 규칙은 **이미 게시되어 있습니다**(jaeyeon-life → Firestore → 규칙).
+규칙을 바꿀 때는 콘솔 편집기에 `firebase/firestore.rules` 의 내용을 넣고 **게시**하거나,
 
 ```bash
 firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어 있을 때
 ```
 
-게시하면 사진첩 사진도 함께 공유되고, ‘백업·관리’ 화면의 경고도 사라집니다.
+> 콘솔 편집기는 한 번에 다룰 수 있는 길이가 짧아, 게시된 규칙은 같은 내용을 공백·함수 이름만 줄인 한 줄짜리 사본입니다.
+> 사진첩 경로(`.../gallery/{photoId}`)는 `id`(문자열)·`dataUrl`(900KB까지)·`note`(120자까지, 선택)·`addedAt`/`updatedAt`(timestamp) 만 허용합니다.
 
 ## 📅 우리들의 캘린더
 

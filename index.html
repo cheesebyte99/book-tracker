@@ -1323,11 +1323,13 @@
   var FIREBASE_VERSION = '10.14.1';
   var SHARE_COLLECTION = 'bookshelves';
   var SHARE_ROOM_KEY = 'pickle_book_tracker_share_room';
-  /* Firestore 문서 한도는 1MB 입니다. 글자·표지·사진첩을 합쳐 이 안으로 맞춥니다. */
+  /* Firestore 문서 한도는 1MB 입니다. 글자·표지를 합쳐 이 안으로 맞춥니다. */
   var SHARE_PHOTO_MAX_CHARS = 700000;
   var SHARE_DOC_MAX_CHARS = 880000;
-  /* 공유본 사진첩 사진 한 장의 최소 크기. 이보다 줄여야 하면 구절 글씨를 못 읽으므로 뻔다. */
-  var SHARE_GALLERY_MIN_CHARS = 40000;
+  /* 책 사진첩은 books/{id}/gallery/{photoId} 하위 컬렉션에 사진 한 장씩 담습니다.
+     사진 한 장 문서는 규칙상 900KB 까지 넣을 수 있어 사실상 무제한입니다. */
+  var SHARE_GALLERY_COLLECTION = 'gallery';
+  var SHARE_GALLERY_MAX_CHARS = 880000;
 
   var STATUSES = ['완독', '읽는 중', '읽고 싶음'];
   var FILTERS = ['전체', '완독', '읽는 중', '읽고 싶음'];
@@ -1660,8 +1662,15 @@
      끝까지 가도 목표에 못 미치면 마지막 두 단계(640·560px)로 최대한 담아 봅니다. */
   var GALLERY_STEPS = [[1000, 0.78], [1000, 0.7], [960, 0.66], [900, 0.62],
                        [820, 0.58], [760, 0.54], [700, 0.5], [640, 0.48], [560, 0.45]];
-  /* 사진첩 글자 수 합계가 이보다 넘으면 저장 공간이 빠듯하다고 알립니다. (약 2.7MB) */
+  /* 사진첩 글자 수 합계가 이보다 넘으면 저장 공간이 빠듯하다고 알립니다.
+     localStorage(5MB)에서는 약 2.7MB, IndexedDB 에서는 수십 MB까지 넣을 수 있어
+     경고를 훨씬 뒤로 미룹니다. */
   var GALLERY_WARN_CHARS = 2700000;
+  var GALLERY_WARN_CHARS_IDB = 40000000;
+
+  function galleryWarnChars() {
+    return store.mode === 'idb' ? GALLERY_WARN_CHARS_IDB : GALLERY_WARN_CHARS;
+  }
 
   function galleryId() {
     return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -2747,8 +2756,22 @@
   }
 
   /* ------------------------------------------------------------------
-     저장소
+     저장소 — IndexedDB (사진·사진첩을 넉넉하게)
+     - 책 기록 전체(version · last_id · books)를 IndexedDB 의
+       pickle_book_tracker_db → library → 'main' 한 칸에 넣습니다.
+       사진·사진첩이 수백 MB 쌓여도 되고, 예전 localStorage 의 5MB 한도에 걸리지 않습니다.
+     - Gemini API 키와 가벼운 화면 메타(savedAt)만 localStorage 에 남깁니다.
+     - IndexedDB 를 쓸 수 없으면(사생활 보호 모드·아주 오래된 브라우저) 예전처럼
+       localStorage 에 저장하고, 5MB 한도 안내도 그대로 동작합니다.
+     - 예전 localStorage 기록(pickle_book_tracker_v1)이 남아 있으면 처음 한 번
+       IndexedDB 로 옮기고, 옮긴 것을 다시 읽어 확인한 뒤에만 옛 사본을 지웁니다.
      ------------------------------------------------------------------ */
+
+  var IDB_NAME = 'pickle_book_tracker_db';
+  var IDB_STORE = 'library';
+  var IDB_KEY = 'main';
+  var IDB_VERSION = 1;
+  var MIGRATED_KEY = 'pickle_book_tracker_v1_migrated';
 
   var memoryStore = {};
   var storage = (function () {
@@ -2828,20 +2851,330 @@
     return text.length * 2;
   }
 
-  /* 지금 저장된 내용이 브라우저 한도(약 5MB)에서 얼마나 찼는지 추정합니다. */
-  function storageUsage() {
-    var text = '';
-    try { text = JSON.stringify(makePayload(state.books, state.lastId)); } catch (e) { text = ''; }
-    var bytes = storageTextBytes(text);
+  /* IndexedDB 상태 */
+  var store = {
+    mode: 'local',      /* 'idb' | 'local' */
+    ready: false,
+    db: null,
+    opening: null,
+    queue: Promise.resolve(),
+    pending: 0,
+    error: '',          /* 마지막 저장 실패 이유 */
+    migrated: 0         /* 옮겨 온 책 수 (옮긴 직후에만 0 보다 큼) */
+  };
+
+  /* navigator.storage.estimate() 로 얻은 값 (못 얻으면 measured=false) */
+  var storageInfo = { usage: 0, quota: 0, measured: false, persistent: false };
+
+  function idbAvailable() {
+    try { return !!(window.indexedDB && window.IDBKeyRange); } catch (err) { return false; }
+  }
+
+  function idbOpen() {
+    if (store.db) return Promise.resolve(store.db);
+    if (store.opening) return store.opening;
+    store.opening = new Promise(function (resolve, reject) {
+      var request;
+      try {
+        request = window.indexedDB.open(IDB_NAME, IDB_VERSION);
+      } catch (err) { reject(err); return; }
+      request.onupgradeneeded = function () {
+        var db = request.result;
+        try {
+          if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+        } catch (e) {}
+      };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { reject(request.error || new Error('idb-open-failed')); };
+      request.onblocked = function () { reject(new Error('idb-blocked')); };
+    }).then(function (db) {
+      store.db = db;
+      try {
+        db.onversionchange = function () {
+          try { db.close(); } catch (e) {}
+          store.db = null;
+        };
+      } catch (e2) {}
+      return db;
+    }, function (err) {
+      store.opening = null;
+      throw err;
+    });
+    return store.opening;
+  }
+
+  function idbRead() {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(IDB_STORE, 'readonly');
+        var request = tx.objectStore(IDB_STORE).get(IDB_KEY);
+        request.onsuccess = function () { resolve(request.result || null); };
+        request.onerror = function () { reject(request.error || new Error('idb-read-failed')); };
+        tx.onabort = function () { reject(tx.error || new Error('idb-read-aborted')); };
+      });
+    });
+  }
+
+  function idbWrite(record) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        try {
+          tx.objectStore(IDB_STORE).put(record, IDB_KEY);
+        } catch (err) { reject(err); return; }
+        tx.oncomplete = function () { resolve(true); };
+        tx.onerror = function () { reject(tx.error || new Error('idb-write-failed')); };
+        tx.onabort = function () { reject(tx.error || new Error('idb-write-aborted')); };
+      });
+    });
+  }
+
+  function libraryRecord(payload, stamp) {
     return {
-      bytes: bytes,
-      kb: Math.round(bytes / 1024),
-      percent: Math.min(100, Math.round((bytes / STORAGE_QUOTA_BYTES) * 100))
+      version: payload.version,
+      last_id: payload.last_id != null ? payload.last_id : payload.lastId,
+      books: payload.books,
+      savedAt: stamp || new Date().toISOString()
     };
   }
 
+  /* 저장은 한 줄로 세워 차례로 처리합니다(빠르게 여러 번 저장해도 순서가 뒤집히지 않게). */
+  function queueWrite(payload, stamp) {
+    var record = libraryRecord(payload, stamp);
+    store.pending += 1;
+    store.queue = store.queue.then(function () {
+      return idbWrite(record).then(function () {
+        store.error = '';
+        state.lastSaved = record.savedAt;
+        try { storage.set(META_KEY, JSON.stringify({ savedAt: record.savedAt })); } catch (e) {}
+      }, function (err) {
+        store.error = isQuotaError(err)
+          ? '저장 공간이 가득 찼어요. JSON으로 내보낸 뒤 사진을 정리해 주세요.'
+          : '자동 저장이 막혀 있어요. JSON으로 내보내 두세요.';
+        toast(store.error);
+        if (state.view === 'backup') renderBackup();
+      });
+    }).then(function () {
+      store.pending -= 1;
+      if (!store.pending) refreshStorageEstimate();
+    });
+    return store.queue;
+  }
+
+  function payloadBytes() {
+    var text = '';
+    try { text = JSON.stringify(makePayload(state.books, state.lastId)); } catch (e) { text = ''; }
+    return storageTextBytes(text);
+  }
+
+  /* 저장 공간: IndexedDB 모드에서는 브라우저가 알려 주는 실제 사용량을 씁니다.
+     (예전처럼 5MB 를 한도로 삼지 않으므로 ‘거의 꽉 참’ 경고가 잘못 뜨지 않습니다.) */
+  function storageUsage() {
+    var bytes = payloadBytes();
+    var local = store.mode !== 'idb';
+    var usage = storageInfo.measured ? Math.max(storageInfo.usage, bytes) : bytes;
+    var quota = local ? STORAGE_QUOTA_BYTES
+      : (storageInfo.measured && storageInfo.quota ? storageInfo.quota : 0);
+    var percent = quota ? Math.min(100, Math.round((usage / quota) * 100)) : 0;
+    return {
+      bytes: bytes,
+      kb: Math.round(bytes / 1024),
+      usage: usage,
+      quota: quota,
+      percent: percent,
+      mode: store.mode,
+      local: local,
+      measured: storageInfo.measured
+    };
+  }
+
+  function formatBytes(bytes) {
+    var n = Math.max(0, Number(bytes) || 0);
+    if (n >= 1024 * 1024 * 1024) return (Math.round((n / (1024 * 1024 * 1024)) * 10) / 10) + 'GB';
+    if (n >= 1024 * 1024) return (Math.round((n / (1024 * 1024)) * 10) / 10) + 'MB';
+    if (n >= 1024) return Math.round(n / 1024) + 'KB';
+    return n + 'B';
+  }
+
+  function storageUsageText() {
+    var usage = storageUsage();
+    if (usage.local) {
+      return '약 ' + usage.percent + '% 사용 · ' + formatBytes(usage.usage) + ' / 약 5MB' +
+        (usage.percent >= 80 ? ' · 거의 꽉 참' : '');
+    }
+    var text = '약 ' + formatBytes(usage.usage) + ' 사용';
+    if (usage.quota) text += ' · 여유 ' + formatBytes(Math.max(0, usage.quota - usage.usage));
+    return text;
+  }
+
+  function storageUsageClass() {
+    var usage = storageUsage();
+    if (usage.local) return usage.percent >= 80 ? 'warn' : (usage.percent >= 60 ? '' : 'ok');
+    if (!usage.quota) return 'ok';
+    return usage.percent >= 80 ? 'warn' : 'ok';
+  }
+
+  /* 저장 공간 줄만 다시 그립니다(백업 화면 전체를 다시 그리면 입력 중인 글이 지워집니다). */
+  function updateStorageMeter() {
+    var el = document.getElementById('storage-usage');
+    if (!el) return;
+    el.className = 'v ' + storageUsageClass();
+    el.textContent = storageUsageText();
+  }
+
+  function refreshStorageEstimate() {
+    var api = window.navigator && window.navigator.storage;
+    if (store.mode !== 'idb' || !api || typeof api.estimate !== 'function') {
+      storageInfo = { usage: 0, quota: 0, measured: false, persistent: storageInfo.persistent };
+      updateStorageMeter();
+      return Promise.resolve(storageInfo);
+    }
+    return Promise.resolve(api.estimate()).then(function (est) {
+      storageInfo = {
+        usage: Math.max(0, Math.round((est && est.usage) || 0)),
+        quota: Math.max(0, Math.round((est && est.quota) || 0)),
+        measured: true,
+        persistent: storageInfo.persistent
+      };
+      updateStorageMeter();
+      return storageInfo;
+    }, function () {
+      storageInfo = { usage: 0, quota: 0, measured: false, persistent: storageInfo.persistent };
+      updateStorageMeter();
+      return storageInfo;
+    });
+  }
+
+  /* 브라우저가 저장소를 지우지 않도록 ‘지속 저장’을 조용히 요청합니다.
+     (묻는 브라우저에서는 건너뜁니다 — 크롬·엣지·삼성 인터넷은 묻지 않고 바로 알려 줍니다.) */
+  function requestPersistent() {
+    var nav = window.navigator;
+    var api = nav && nav.storage;
+    if (!api || typeof api.persist !== 'function') return;
+    if (!/Chrome|Chromium|Edg|SamsungBrowser/.test(String(nav.userAgent || ''))) return;
+    var check = typeof api.persisted === 'function'
+      ? Promise.resolve(api.persisted()).catch(function () { return false; })
+      : Promise.resolve(false);
+    check.then(function (already) {
+      if (already) {
+        storageInfo.persistent = true;
+        updateStorageMeter();
+        return null;
+      }
+      return api.persist();
+    }).then(function (granted) {
+      if (granted) {
+        storageInfo.persistent = true;
+        updateStorageMeter();
+      }
+    }, function () {});
+  }
+
+  /* 옛 localStorage 기록을 읽습니다. */
+  function readLocalLibrary() {
+    var raw = null;
+    try { raw = storage.get(STORAGE_KEY); } catch (err) { raw = null; }
+    if (!raw) return { raw: '', payload: null, broken: false };
+    try {
+      return { raw: raw, payload: normalizePayload(JSON.parse(raw)), broken: false };
+    } catch (err2) {
+      /* 읽지 못한 기록은 지우지 않고 따로 보관합니다. */
+      try { storage.set(STORAGE_KEY + '_broken_' + Date.now(), raw); } catch (e3) {}
+      return { raw: raw, payload: null, broken: true };
+    }
+  }
+
+  function readMeta() {
+    try {
+      var metaRaw = storage.get(META_KEY);
+      if (metaRaw) {
+        var meta = JSON.parse(metaRaw);
+        if (meta && meta.savedAt) state.lastSaved = meta.savedAt;
+      }
+    } catch (err) {}
+  }
+
+  function applyLibrary(payload, stamp) {
+    state.books = payload.books;
+    state.lastId = payload.lastId;
+    if (stamp) state.lastSaved = String(stamp);
+  }
+
+  /* 옮긴 기록을 다시 읽어 확인한 뒤에만 옛 사본(localStorage)을 지웁니다. */
+  function finishMigration(record, rawChars) {
+    return idbRead().then(function (back) {
+      var same = false;
+      try {
+        same = !!(back && back.books) && back.books.length === record.books.length &&
+          JSON.stringify(back).length === JSON.stringify(record).length;
+      } catch (e) { same = false; }
+      if (!same) return false;
+      try {
+        storage.set(MIGRATED_KEY, JSON.stringify({
+          at: new Date().toISOString(), books: record.books.length, chars: rawChars
+        }));
+      } catch (e2) {}
+      try { storage.remove(STORAGE_KEY); } catch (e3) {}
+      return true;
+    }, function () { return false; });
+  }
+
+  /* IndexedDB → (없으면) localStorage 순서로 기록을 불러옵니다.
+     local 을 넘기면 이미 읽어 둔 옛 기록을 그대로 씁니다. */
+  function load(local) {
+    var early = local || readLocalLibrary();
+    if (early.broken) {
+      state.loadWarning = '저장된 기록을 읽지 못해 빈 책장으로 열었어요. 예전 데이터는 따로 보관해 두었습니다.';
+    }
+    readMeta();
+
+    if (!idbAvailable()) {
+      /* IndexedDB 가 없으면 예전처럼 localStorage 로 동작합니다. */
+      store.mode = 'local';
+      if (early.payload) applyLibrary(early.payload);
+      store.ready = true;
+      return Promise.resolve(state);
+    }
+
+    return idbRead().then(function (saved) {
+      store.mode = 'idb';
+      if (saved && Object.prototype.toString.call(saved.books) === '[object Array]') {
+        applyLibrary(normalizePayload(saved), saved.savedAt);
+        requestPersistent();
+        return state;
+      }
+      if (!early.payload) {
+        requestPersistent();
+        return state;
+      }
+      /* 처음 한 번: 옛 localStorage 기록을 통째로 IndexedDB 로 옮깁니다. */
+      var payload = {
+        version: early.payload.version,
+        last_id: early.payload.lastId,
+        books: early.payload.books
+      };
+      var record = libraryRecord(payload, new Date().toISOString());
+      applyLibrary(early.payload);
+      return idbWrite(record).then(function () {
+        return finishMigration(record, early.raw.length);
+      }).then(function (moved) {
+        if (moved) store.migrated = record.books.length;
+        requestPersistent();
+        return state;
+      });
+    }).catch(function () {
+      /* IndexedDB 를 열지 못하면 예전처럼 localStorage 로 저장합니다. */
+      store.mode = 'local';
+      if (!state.books.length && early.payload) applyLibrary(early.payload);
+      return state;
+    }).then(function (value) {
+      store.ready = true;
+      return value;
+    });
+  }
+
   function save() {
-    /* 공유 중에는 이 기기(localStorage) 기록을 건드리지 않습니다.
+    /* 공유 중에는 이 기기 기록을 건드리지 않습니다.
        방을 나가면 원래 내 책장 기록으로 돌아옵니다. */
     if (shared.active) return { ok: true, quota: false, shared: true };
 
@@ -2853,6 +3186,16 @@
       return { ok: false, quota: false, message: '기록을 저장할 수 있는 모양으로 바꾸지 못했어요.' };
     }
 
+    var stamp = new Date().toISOString();
+
+    if (store.mode === 'idb') {
+      /* IndexedDB 는 비동기라 화면을 먼저 바꾸고 차례로 저장합니다.
+         저장에 실패하면 store.error 로 알리고 ‘백업·관리’에 남깁니다. */
+      state.lastSaved = stamp;
+      queueWrite(payload, stamp);
+      return { ok: true, quota: false, pending: true, savedAt: stamp };
+    }
+
     try {
       storage.set(STORAGE_KEY, text);
     } catch (err2) {
@@ -2862,36 +3205,35 @@
       return { ok: false, quota: false, message: '자동 저장이 막혀 있어요. JSON으로 내보내 두세요.' };
     }
 
-    var stamp = new Date().toISOString();
     state.lastSaved = stamp;
     try { storage.set(META_KEY, JSON.stringify({ savedAt: stamp })); } catch (e2) {}
     return { ok: true, quota: false };
   }
 
-  function load() {
-    var raw = null;
-    try { raw = storage.get(STORAGE_KEY); } catch (err) { raw = null; }
-
-    if (raw) {
-      try {
-        var parsed = JSON.parse(raw);
-        var norm = normalizePayload(parsed);
-        state.books = norm.books;
-        state.lastId = norm.lastId;
-      } catch (err2) {
-        /* 읽지 못한 기록은 지우지 않고 따로 보관합니다. */
-        try { storage.set(STORAGE_KEY + '_broken_' + Date.now(), raw); } catch (e3) {}
-        state.loadWarning = '저장된 기록을 읽지 못해 빈 책장으로 열었어요. 예전 데이터는 따로 보관해 두었습니다.';
+  /* 지금 저장된 기록을 JSON 글자로 돌려줍니다(확인·테스트용). 저장 대기열을 먼저 비웁니다. */
+  function readPersisted() {
+    return store.queue.then(function () {
+      if (store.mode !== 'idb') {
+        var raw = null;
+        try { raw = storage.get(STORAGE_KEY); } catch (e) { raw = null; }
+        return raw;
       }
-    }
+      return idbRead().then(function (saved) {
+        if (!saved) return null;
+        return JSON.stringify({ version: saved.version, last_id: saved.last_id, books: saved.books });
+      });
+    });
+  }
 
-    try {
-      var metaRaw = storage.get(META_KEY);
-      if (metaRaw) {
-        var meta = JSON.parse(metaRaw);
-        if (meta && meta.savedAt) state.lastSaved = meta.savedAt;
-      }
-    } catch (err4) {}
+  function storageState() {
+    return {
+      mode: store.mode,
+      ready: store.ready,
+      error: store.error,
+      migrated: store.migrated,
+      pending: store.pending,
+      persistent: !!storageInfo.persistent
+    };
   }
 
   /* ------------------------------------------------------------------
@@ -3234,7 +3576,8 @@
     html += '<div class="kv-row"><span class="k">저장된 책</span><span class="v">' + state.books.length + '권</span></div>';
     html += '<div class="kv-row"><span class="k">마지막 저장</span><span class="v">' + esc(savedText) + '</span></div>';
     html += '<div class="kv-row"><span class="k">자동 저장</span><span class="v ' +
-      (storage.ok ? 'ok' : 'warn') + '">' + (storage.ok ? '정상' : '제한됨') + '</span></div>';
+      (store.error ? 'warn' : 'ok') + '">' +
+      (store.error ? '막힘' : (store.mode === 'idb' ? '정상' : '정상 (localStorage)')) + '</span></div>';
 
     var photoCount = 0;
     var photoKB = 0;
@@ -3253,19 +3596,29 @@
         albumKB += galleryTotalKB(albumItems);
       }
     }
-    var usage = storageUsage();
     html += '<div class="kv-row"><span class="k">사진 있는 책</span><span class="v">' + photoCount + '권' +
       (photoCount ? ' · 약 ' + formatKB(photoKB) : '') + '</span></div>';
     html += '<div class="kv-row"><span class="k">📸 책 사진첩</span><span class="v">' + albumCount + '권' +
       (albumCount ? ' · 사진 ' + albumItemsTotal + '장 · 약 ' + formatKB(albumKB) : '') + '</span></div>';
-    html += '<div class="kv-row"><span class="k">저장 공간</span><span class="v ' +
-      (usage.percent >= 80 ? 'warn' : (usage.percent >= 60 ? '' : 'ok')) + '">약 ' + usage.percent + '% 사용' +
-      (usage.percent >= 80 ? ' · 거의 꽉 참' : '') + '</span></div>';
+    html += '<div class="kv-row"><span class="k">저장 방식</span><span class="v ok">' +
+      (store.mode === 'idb' ? 'IndexedDB (사진 넉넉히)' : 'localStorage (약 5MB 한도)') + '</span></div>';
+    html += '<div class="kv-row"><span class="k">저장 공간</span><span class="v ' + storageUsageClass() +
+      '" id="storage-usage">' + esc(storageUsageText()) + '</span></div>';
+    if (store.error) {
+      html += '<p class="key-state warn" id="storage-error">' + esc(store.error) + '</p>';
+    }
 
-    html += '<p class="hint">기록은 이 휴대폰 브라우저 안(localStorage)에만 저장되고 서버로 보내지 않습니다. ' +
+    html += '<p class="hint">기록은 이 휴대폰 브라우저 안(' +
+      (store.mode === 'idb' ? 'IndexedDB' : 'localStorage') + ')에만 저장되고 서버로 보내지 않습니다. ' +
       '인터넷 없이도 열리며, 휴대폰을 바꾸거나 브라우저 데이터를 지울 때는 먼저 JSON으로 백업해 두세요. ' +
       '사진은 넣을 때 긴 변 600px JPEG로 자동으로 줄여 저장합니다(한 장에 대략 30~150KB). ' +
-      '📸 사진첩 사진은 글씨가 읽히도록 긴 변 1000px로 저장합니다(한 장 80~180KB).</p></div>';
+      '📸 사진첩 사진은 글씨가 읽히도록 긴 변 1000px로 저장합니다(한 장 80~180KB).</p>';
+    if (store.mode === 'idb') {
+      html += '<p class="hint">예전 저장소(약 5MB)에서 IndexedDB 로 옮겨 사진을 수백 MB까지 담을 수 있습니다. ' +
+        '옮긴 기록은 다시 읽어 확인한 뒤에만 옛 사본을 지웁니다.' +
+        (store.migrated ? ' (이번에 ' + store.migrated + '권을 옮겼어요.)' : '') + '</p>';
+    }
+    html += '</div>';
 
     html += '<div class="panel"><h3>📤 내보내기</h3><div class="btn-stack">';
     html += '<button type="button" class="btn block" data-action="export-json">JSON으로 내보내기 (books.json)</button>';
@@ -3767,7 +4120,7 @@
       text = '사진 ' + items.length + '장 · 약 ' + formatKB(galleryTotalKB(items)) +
         ' · 사진을 누르면 크게 보고, 아래 칸에 페이지·메모를 남길 수 있어요. 저장을 누르면 반영됩니다.';
     }
-    var warn = galleryTotalChars(items) > GALLERY_WARN_CHARS;
+    var warn = galleryTotalChars(items) > galleryWarnChars();
     if (warn && !state.galleryBusy) {
       text += ' 저장 공간이 빠듯해요 — 몇 장만 남기거나 ‘백업·관리’에서 JSON으로 내보낸 뒤 정리해 주세요.';
     }
@@ -3950,7 +4303,9 @@
 
   function showQuotaDialog(options) {
     var opts = options || {};
-    var lines = ['브라우저에 기록을 담는 공간(약 5MB)이 꽉 찼어요.'];
+    var lines = [store.mode === 'idb'
+      ? '브라우저의 저장 공간이 꽉 찼어요.'
+      : '브라우저에 기록을 담는 공간(약 5MB)이 꽉 찼어요.'];
     if (opts.photoKB) lines.push('이번 사진: 약 ' + formatKB(opts.photoKB));
     if (opts.galleryCount) lines.push('사진첩 사진 ' + opts.galleryCount + '장: 약 ' + formatKB(opts.galleryKB));
     if (opts.usedKB) lines.push('지금 기록: 약 ' + formatKB(opts.usedKB) + ' (추정)');
@@ -4303,7 +4658,15 @@
     busy: false,
     error: '',
     count: 0,
-    galleryBlocked: false
+    galleryBlocked: false,
+    /* 사진첩은 책마다 하위 컬렉션(books/{id}/gallery)에 사진 한 장씩 나눠 담습니다. */
+    rawBooks: {},       /* 책ID(문자열) → 부모 문서에서 읽은 책 (사진첩 제외) */
+    inlineGallery: {},  /* 책ID → 옛 문서에 남아 있던 gallery 배열 */
+    galleries: {},      /* 책ID → 하위 컬렉션에서 읽은 사진첩 */
+    galleryUnsub: {},   /* 책ID → onSnapshot 해제 함수 */
+    galleryReady: {},   /* 책ID → 첫 스냅샷이 도착했는지 */
+    galleryMoved: {},   /* 책ID → 옛 gallery 를 하위 컬렉션으로 옮겼는지 */
+    galleryError: ''
   };
 
   function shareConfigured() {
@@ -4393,6 +4756,7 @@
   }
 
   function shareDocFor(book) {
+    /* 부모 문서에는 글자·표지만 담습니다. 사진첩(gallery)은 하위 컬렉션으로 나갑니다. */
     return {
       id: toInt(book.id),
       title: String(book.title || ''),
@@ -4404,12 +4768,11 @@
       memo: String(book.memo || ''),
       started_at: String(book.started_at || ''),
       photo: String(book.photo || ''),
-      gallery: serializeGallery(book.gallery),
       updatedAt: null
     };
   }
 
-  /* 사진이 너무 크면 Firestore 한도 안으로 다시 줄입니다. (못 줄이면 사진만 뻐고) */
+  /* 사진이 너무 크면 Firestore 한도 안으로 다시 줄입니다. (못 줄이면 사진만 뺍니다) */
   function shrinkPhotoForShare(dataUrl, maxChars) {
     return new Promise(function (resolve) {
       if (!dataUrl || dataUrl.length <= maxChars) { resolve(dataUrl || ''); return; }
@@ -4432,62 +4795,267 @@
     });
   }
 
+  /* 부모 문서(책) — 글자·표지만. 1MB 한도 안에 넉넉히 들어갑니다. */
   function prepareShareDoc(book) {
     var doc = shareDocFor(book);
-    var gallery = doc.gallery || [];
-    var size = docChars(doc);
-    if (size <= SHARE_DOC_MAX_CHARS) {
-      return Promise.resolve({ doc: doc, photoDropped: false, galleryDropped: 0 });
+    if (docChars(doc) <= SHARE_DOC_MAX_CHARS) {
+      return Promise.resolve({ doc: doc, photoDropped: false });
     }
-
-    /* 사진첩이 차지하는 몫을 빼고, 남은 한도 안에서 사진첩을 다시 줄입니다. */
-    var galleryChars = 0;
-    for (var i = 0; i < gallery.length; i++) {
-      galleryChars += String(gallery[i].dataUrl || '').length + 200;
-    }
-    var budget = Math.max(0, SHARE_DOC_MAX_CHARS - (size - galleryChars) - 2000);
-    return fitGalleryForShare(gallery, budget).then(function (fitted) {
-      doc.gallery = fitted.list;
-      var left = docChars(doc);
-      if (left <= SHARE_DOC_MAX_CHARS || !doc.photo) {
-        return { doc: doc, photoDropped: false, galleryDropped: fitted.dropped };
-      }
-      /* 그래도 넘치면 표지 사진을 줄이고, 안 되면 공유본에서 뺩니다. */
-      var room = SHARE_DOC_MAX_CHARS - (left - String(doc.photo).length) - 2000;
-      return shrinkPhotoForShare(doc.photo, Math.max(0, room)).then(function (small) {
-        doc.photo = small || '';
-        return { doc: doc, photoDropped: !small, galleryDropped: fitted.dropped };
-      });
+    /* 표지 사진을 한도 안으로 줄이고, 안 되면 공유본에서 뺍니다. */
+    var room = SHARE_DOC_MAX_CHARS - (docChars(doc) - String(doc.photo).length) - 2000;
+    return shrinkPhotoForShare(doc.photo, Math.max(0, room)).then(function (small) {
+      doc.photo = small || '';
+      return { doc: doc, photoDropped: !small };
     });
   }
 
-  /* Firestore 문서 한도(1MB) 안에서 사진첩 몫만큼 사진을 줄입니다.
-     너무 작게 줄여야 하면(구절 글씨를 읽기 어려우면) 그 사진은 공유본에서 뻔다. */
-  function fitGalleryForShare(items, budget) {
+  /* 사진첩 사진 한 장 → 하위 컬렉션 문서.
+     규칙: { id: string, dataUrl: string ≤ 900KB, note?: string ≤ 120자,
+              addedAt: timestamp, updatedAt: timestamp } */
+  function prepareGalleryDoc(item, mod) {
+    var url = String((item && item.dataUrl) || '');
+    if (!url) return Promise.resolve(null);
+    var fit = url.length <= SHARE_GALLERY_MAX_CHARS
+      ? Promise.resolve(url)
+      : shrinkPhotoForShare(url, SHARE_GALLERY_MAX_CHARS - 1000);
+    return fit.then(function (small) {
+      if (!small) return null;
+      var doc = {
+        id: normalizeGalleryId(item.id) || galleryId(),
+        dataUrl: small,
+        addedAt: galleryTimestamp(item.addedAt, mod),
+        updatedAt: mod.serverTimestamp()
+      };
+      var note = normalizeGalleryNote(item.note);
+      if (note) doc.note = note;
+      return doc;
+    });
+  }
+
+  /* addedAt 은 timestamp 로 보냅니다(규칙: is timestamp). */
+  function galleryTimestamp(value, mod) {
+    var date = value ? new Date(value) : new Date();
+    if (isNaN(date.getTime())) date = new Date();
+    try {
+      if (mod && mod.Timestamp && typeof mod.Timestamp.fromDate === 'function') {
+        return mod.Timestamp.fromDate(date);
+      }
+    } catch (e) {}
+    try { return mod.serverTimestamp(); } catch (e2) {}
+    return date;
+  }
+
+  /* 하위 컬렉션 문서 → 앱의 사진첩 항목 */
+  function galleryItemFromDoc(data) {
+    var raw = data || {};
+    var url = String(raw.dataUrl || '');
+    if (!url) return null;
+    var item = { id: normalizeGalleryId(raw.id) || galleryId(), dataUrl: url };
+    var note = normalizeGalleryNote(raw.note);
+    if (note) item.note = note;
+    var added = raw.addedAt;
+    if (added && typeof added.toDate === 'function') {
+      try { item.addedAt = added.toDate().toISOString(); } catch (e) {}
+    } else if (added) {
+      var date = new Date(added);
+      if (!isNaN(date.getTime())) item.addedAt = date.toISOString();
+    }
+    return item;
+  }
+
+  function gallerySort(a, b) {
+    var at = a && a.addedAt ? new Date(a.addedAt).getTime() : 0;
+    var bt = b && b.addedAt ? new Date(b.addedAt).getTime() : 0;
+    if (isNaN(at)) at = 0;
+    if (isNaN(bt)) bt = 0;
+    if (at !== bt) return at - bt;
+    return String((a && a.id) || '').localeCompare(String((b && b.id) || ''));
+  }
+
+  /* 하위 컬렉션 사진 + 옛 문서에 남아 있던 gallery 를 합칩니다(같은 사진은 한 번만). */
+  function mergeGalleryLists(sub, inline) {
+    var out = [];
+    var seenUrl = {};
+    var seenId = {};
+    var lists = [sub || [], inline || []];
+    for (var l = 0; l < lists.length; l++) {
+      for (var i = 0; i < lists[l].length; i++) {
+        var item = lists[l][i];
+        if (!item || !item.dataUrl) continue;
+        if (seenUrl[item.dataUrl]) continue;
+        if (item.id && seenId[item.id]) continue;
+        seenUrl[item.dataUrl] = true;
+        if (item.id) seenId[item.id] = true;
+        out.push(item);
+      }
+    }
+    return sanitizeGallery(out);
+  }
+
+  /* 부모 문서 스냅샷 + 책마다의 사진첩 스냅샷으로 이 방의 책장을 다시 만듭니다. */
+  function rebuildSharedBooks() {
+    var ids = [];
+    for (var key in shared.rawBooks) {
+      if (Object.prototype.hasOwnProperty.call(shared.rawBooks, key)) ids.push(key);
+    }
+    ids.sort(function (a, b) { return toInt(a) - toInt(b); });
     var list = [];
-    if (!items || !items.length) return Promise.resolve({ list: list, dropped: 0 });
-    var per = Math.floor(budget / items.length);
-    var chain = Promise.resolve();
-    items.forEach(function (item) {
-      chain = chain.then(function () {
-        var url = String(item.dataUrl || '');
-        if (!url) return null;
-        var room = per - 800;
-        if (url.length <= room) { list.push(item); return null; }
-        if (room < SHARE_GALLERY_MIN_CHARS) return null;
-        return shrinkPhotoForShare(url, room).then(function (small) {
-          if (!small) return null;
-          var copy = { id: item.id, dataUrl: small };
-          if (item.note) copy.note = item.note;
-          if (item.addedAt) copy.addedAt = item.addedAt;
-          list.push(copy);
-          return null;
-        });
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var book = shared.rawBooks[id];
+      book.gallery = mergeGalleryLists(shared.galleries[id], shared.inlineGallery[id]);
+      list.push(book);
+    }
+    state.books = list;
+    var maxId = 0;
+    for (var j = 0; j < list.length; j++) {
+      if (list[j].id > maxId) maxId = list[j].id;
+    }
+    state.lastId = maxId;
+    shared.count = list.length;
+  }
+
+  function galleryWriteError(err) {
+    shared.galleryError = shareErrorMessage(err);
+    if (isPermissionDenied(err)) {
+      shared.galleryBlocked = true;
+      toast('사진첩은 아직 공유 규칙(firestore.rules)에 없어 이 기기에만 남습니다.');
+    } else {
+      toast('사진첩 공유 실패: ' + shared.galleryError);
+    }
+    if (state.view === 'backup') syncSharePanel();
+  }
+
+  /* 방의 한 책에 붙은 사진첩 하위 컬렉션을 실시간으로 따라갑니다. */
+  function shareSubscribeGallery(bookId) {
+    var key = String(bookId);
+    if (shared.galleryUnsub[key] || !shared.active || !shared.fs) return;
+    var fs = shared.fs;
+    var mod = fs.mod;
+    var col = mod.collection(fs.db, SHARE_COLLECTION, shared.roomId, 'books', key, SHARE_GALLERY_COLLECTION);
+    var unsub = mod.onSnapshot(col, function (snap) {
+      if (!shared.active || !shared.roomId) return;
+      var items = [];
+      snap.forEach(function (docSnap) {
+        var item = galleryItemFromDoc(docSnap.data());
+        if (item) items.push(item);
       });
+      items.sort(gallerySort);
+      shared.galleries[key] = items;
+      shared.galleryReady[key] = true;
+      shared.galleryError = '';
+      rebuildSharedBooks();
+      renderAll();
+      if (state.view === 'backup') syncSharePanel();
+      moveInlineGallery(key);
+    }, function (err) {
+      shared.galleryError = shareErrorMessage(err);
+      if (isPermissionDenied(err)) shared.galleryBlocked = true;
+      if (state.view === 'backup') syncSharePanel();
     });
-    return chain.then(function () {
-      return { list: list, dropped: items.length - list.length };
-    });
+    shared.galleryUnsub[key] = unsub;
+  }
+
+  /* 책이 늘면 사진첩 구독을 붙이고, 사라진 책의 구독은 뗍니다. */
+  function syncGallerySubscriptions() {
+    var keep = {};
+    for (var key in shared.rawBooks) {
+      if (!Object.prototype.hasOwnProperty.call(shared.rawBooks, key)) continue;
+      keep[key] = true;
+      shareSubscribeGallery(key);
+    }
+    for (var booked in shared.galleryUnsub) {
+      if (!Object.prototype.hasOwnProperty.call(shared.galleryUnsub, booked)) continue;
+      if (keep[booked]) continue;
+      try { shared.galleryUnsub[booked](); } catch (e) {}
+      delete shared.galleryUnsub[booked];
+      delete shared.galleries[booked];
+      delete shared.galleryReady[booked];
+      delete shared.inlineGallery[booked];
+      delete shared.galleryMoved[booked];
+    }
+  }
+
+  function shareDetachGalleries() {
+    for (var key in shared.galleryUnsub) {
+      if (!Object.prototype.hasOwnProperty.call(shared.galleryUnsub, key)) continue;
+      try { shared.galleryUnsub[key](); } catch (e) {}
+    }
+    shared.galleryUnsub = {};
+    shared.galleries = {};
+    shared.galleryReady = {};
+    shared.galleryMoved = {};
+    shared.galleryError = '';
+    shared.rawBooks = {};
+    shared.inlineGallery = {};
+  }
+
+  /* 옛 문서에 사진첩이 통째로 들어 있으면(gallery 배열) 하위 컬렉션으로 한 번 옮깁니다. */
+  function moveInlineGallery(bookId) {
+    var key = String(bookId);
+    if (shared.galleryMoved[key]) return;
+    var inline = shared.inlineGallery[key] || [];
+    if (!inline.length) return;
+    shared.galleryMoved[key] = true;
+    var have = {};
+    var current = shared.galleries[key] || [];
+    for (var i = 0; i < current.length; i++) have[current[i].dataUrl] = true;
+    var items = [];
+    for (var j = 0; j < inline.length; j++) {
+      if (!have[inline[j].dataUrl]) items.push(inline[j]);
+    }
+    if (!items.length) return;
+    syncGalleryItems(key, items, current);
+  }
+
+  /* 사진첩 하위 컬렉션을 원하는 목록에 맞춥니다.
+     새 사진은 쓰고, 메모가 바뀐 사진은 고치고, 빠진 사진은 지웁니다. */
+  function syncGalleryItems(bookId, wanted, current) {
+    if (!shared.active || !shared.fs) return Promise.resolve();
+    var fs = shared.fs;
+    var mod = fs.mod;
+    var key = String(bookId);
+    var room = shared.roomId;
+    var now = current || shared.galleries[key] || [];
+    var have = {};
+    var i;
+    for (i = 0; i < now.length; i++) have[String(now[i].id)] = now[i];
+    var items = sanitizeGallery(wanted);
+    var keep = {};
+    var chain = Promise.resolve();
+    for (i = 0; i < items.length; i++) {
+      (function (item) {
+        keep[String(item.id)] = true;
+        var old = have[String(item.id)];
+        if (old && old.dataUrl === item.dataUrl && String(old.note || '') === String(item.note || '')) return;
+        chain = chain.then(function () {
+          if (!shared.active || shared.roomId !== room) return null;
+          return prepareGalleryDoc(item, mod).then(function (doc) {
+            if (!doc) {
+              toast('사진첩 사진 한 장은 너무 커서 공유본에서 뺐어요.');
+              return null;
+            }
+            var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, doc.id);
+            return mod.setDoc(ref, doc).catch(galleryWriteError);
+          });
+        });
+      })(items[i]);
+    }
+    var gone = [];
+    for (var oldId in have) {
+      if (!Object.prototype.hasOwnProperty.call(have, oldId)) continue;
+      if (!keep[oldId]) gone.push(oldId);
+    }
+    for (var g = 0; g < gone.length; g++) {
+      (function (oldId) {
+        chain = chain.then(function () {
+          if (!shared.active || shared.roomId !== room) return null;
+          var ref = mod.doc(fs.db, SHARE_COLLECTION, room, 'books', key, SHARE_GALLERY_COLLECTION, oldId);
+          return mod.deleteDoc(ref).catch(galleryWriteError);
+        });
+      })(gone[g]);
+    }
+    return chain;
   }
 
   function withEmptyPhoto(doc) {
@@ -4507,15 +5075,15 @@
     if (!shared.active || !shared.fs) return Promise.resolve();
     var fs = shared.fs;
     var mod = fs.mod;
-    var roomId = shared.roomId;
     return prepareShareDoc(book).then(function (prepared) {
       if (prepared.photoDropped) toast('사진이 너무 커서 공유본에서는 뺐어요.');
-      if (prepared.galleryDropped) {
-        toast('사진첩 사진 ' + prepared.galleryDropped + '장은 공유본에서 뺐어요 (문서 1MB 한도).');
-      }
       var doc = prepared.doc;
       doc.updatedAt = mod.serverTimestamp();
       return writeShareDoc(mod, fs, book, doc);
+    }).then(function () {
+      /* 사진첩은 책 아래 하위 컬렉션(books/{id}/gallery)에 사진 한 장씩 담습니다.
+         문서 한도(1MB)를 사진 한 장이 나눠 쓰지 않아 장수 제한이 사실상 없습니다. */
+      return syncGalleryItems(book.id, book.gallery || [], shared.galleries[String(book.id)] || []);
     }).catch(function (err) {
       shared.error = shareErrorMessage(err);
       toast('공유 저장 실패: ' + shared.error);
@@ -4523,21 +5091,9 @@
     });
   }
 
-  /* firestore.rules 에 아직 gallery 항목이 없으면 사진첩을 뺀 문서로 한 번 더 씁니다.
-     (사진첩은 이 기기에 남고, 글자·표지 공유는 그대로 됩니다.) */
   function writeShareDoc(mod, fs, book, doc) {
     var ref = mod.doc(fs.db, SHARE_COLLECTION, shared.roomId, 'books', String(book.id));
-    return mod.setDoc(ref, doc).catch(function (err) {
-      if (!isPermissionDenied(err) || !('gallery' in doc)) throw err;
-      var copy = {};
-      for (var key in doc) {
-        if (Object.prototype.hasOwnProperty.call(doc, key) && key !== 'gallery') copy[key] = doc[key];
-      }
-      shared.galleryBlocked = true;
-      toast('사진첩은 아직 공유 규칙에 없어 이 기기에만 저장했어요.');
-      if (state.view === 'backup') renderBackup();
-      return mod.setDoc(ref, copy);
-    });
+    return mod.setDoc(ref, doc);
   }
 
   function isPermissionDenied(err) {
@@ -4545,17 +5101,32 @@
     return text.indexOf('permission-denied') !== -1;
   }
 
+  /* 책 하나와 그 사진첩(하위 컬렉션 문서들)을 함께 지웁니다. */
+  function deleteSharedBookTree(mod, fs, bookId) {
+    var key = String(bookId);
+    var col = mod.collection(fs.db, SHARE_COLLECTION, shared.roomId, 'books', key, SHARE_GALLERY_COLLECTION);
+    return mod.getDocs(col).then(function (snap) {
+      var jobs = [];
+      snap.forEach(function (docSnap) { jobs.push(mod.deleteDoc(docSnap.ref)); });
+      return Promise.all(jobs);
+    }).catch(function () {
+      /* 사진첩이 규칙에 없거나 못 읽어도 책 문서는 지웁니다. */
+      return null;
+    }).then(function () {
+      return mod.deleteDoc(mod.doc(fs.db, SHARE_COLLECTION, shared.roomId, 'books', key));
+    });
+  }
+
   function shareDeleteBook(id) {
     if (!shared.active || !shared.fs) return Promise.resolve();
     var fs = shared.fs;
-    return fs.mod.deleteDoc(fs.mod.doc(fs.db, SHARE_COLLECTION, shared.roomId, 'books', String(id)))
-      .catch(function (err) {
-        shared.error = shareErrorMessage(err);
-        toast('공유 삭제 실패: ' + shared.error);
-      });
+    return deleteSharedBookTree(fs.mod, fs, id).catch(function (err) {
+      shared.error = shareErrorMessage(err);
+      toast('공유 삭제 실패: ' + shared.error);
+    });
   }
 
-  /* 이 기기의 책장 전체를 공유 방에 맞춥니다(방에만 있고 여기 없는 책은 지움). */
+  /* 이 기기의 책장 전체를 공유 방에 맞춥니다(방에만 있고 여기 없는 책은 사진첩까지 지움). */
   function sharePushAll(list) {
     if (!shared.active || !shared.fs) return Promise.resolve();
     var fs = shared.fs;
@@ -4567,7 +5138,7 @@
     return mod.getDocs(col).then(function (snap) {
       var jobs = [];
       snap.forEach(function (docSnap) {
-        if (!keep[docSnap.id]) jobs.push(mod.deleteDoc(docSnap.ref));
+        if (!keep[docSnap.id]) jobs.push(deleteSharedBookTree(mod, fs, docSnap.id));
       });
       return Promise.all(jobs);
     }).then(function () {
@@ -4593,7 +5164,9 @@
     var mod = fs.mod;
     var col = mod.collection(fs.db, SHARE_COLLECTION, shared.roomId, 'books');
     shared.unsub = mod.onSnapshot(col, function (snap) {
-      var list = [];
+      if (!shared.active) return;
+      var rawBooks = {};
+      var inlineGallery = {};
       snap.forEach(function (docSnap) {
         var data = docSnap.data() || {};
         var book = sanitizeBook({
@@ -4606,20 +5179,20 @@
           rating: data.rating,
           tags: data.tags,
           memo: data.memo,
-          photo: data.photo,
-          gallery: data.gallery
+          photo: data.photo
         });
         if (!book.id) book.id = toInt(docSnap.id);
-        list.push(book);
+        var key = String(book.id);
+        book.gallery = [];
+        rawBooks[key] = book;
+        /* 옛 문서에는 사진첩이 통째로 들어 있었습니다 — 읽을 때만 합쳐 줍니다. */
+        var inline = sanitizeGallery(data.gallery);
+        if (inline.length) inlineGallery[key] = inline;
       });
-      list.sort(function (a, b) { return a.id - b.id; });
-      state.books = list;
-      var maxId = 0;
-      for (var i = 0; i < list.length; i++) {
-        if (list[i].id > maxId) maxId = list[i].id;
-      }
-      state.lastId = maxId;
-      shared.count = list.length;
+      shared.rawBooks = rawBooks;
+      shared.inlineGallery = inlineGallery;
+      rebuildSharedBooks();
+      syncGallerySubscriptions();
       shared.error = '';
       renderAll();
       if (state.view === 'backup') syncSharePanel();
@@ -4655,6 +5228,7 @@
     if (state.view === 'backup') syncSharePanel();
 
     loadFirestore().then(function () {
+      shareDetachGalleries();
       shared.roomId = room;
       shared.active = true;
       shared.busy = false;
@@ -4682,6 +5256,7 @@
 
   function stopShare(silent) {
     shareUnsubscribe();
+    shareDetachGalleries();
     shared.active = false;
     shared.roomId = '';
     shared.busy = false;
@@ -4690,8 +5265,11 @@
     shared.galleryBlocked = false;
     rememberRoom('');
     setShareUrl('');
-    load();
     renderAll();
+    load().then(function () {
+      renderAll();
+      if (state.view === 'backup') syncSharePanel();
+    });
     if (state.view === 'backup') syncSharePanel();
     if (!silent) toast('공유 방을 나왔어요. 내 기기 기록으로 돌아왔습니다.');
   }
@@ -4768,6 +5346,7 @@
         '<button type="button" class="btn sm danger" data-action="share-leave">방 나가기</button>' +
         '</div>';
       html += '<p class="hint">이 링크를 받은 사람은 같은 책장을 보고, 추가·수정·삭제가 서로 바로 반영됩니다. ' +
+        '📸 사진첩은 사진 한 장씩 따로 올려 장수 걱정 없이 실시간으로 함께 봅니다. ' +
         'Gemini API 키는 공유되지 않고 각자 기기에만 저장됩니다. ' +
         '방을 나가면 이 기기에 저장된 원래 내 책장으로 돌아갑니다.</p>';
       if (shared.error) {
@@ -4782,7 +5361,7 @@
     }
 
     html += '<p class="hint">내 책장을 Firebase에 올려 링크로 함께 볼 수 있어요. ' +
-      '사진은 Firestore 문서 한도(1MB)에 맞게 자동으로 줄여 올립니다. ' +
+      '📸 사진첩은 사진 한 장씩 따로 올라가 장수 제한이 없고, 표지 사진만 문서 한도(1MB)에 맞게 자동으로 줄입니다. ' +
       '<strong>Gemini API 키는 공유되지 않습니다</strong>(이 브라우저에만 저장).</p>';
     html += '<div class="key-row key-actions">' +
       '<button type="button" class="btn sm primary" data-action="share-start">공유 시작 (내 책장 ' +
@@ -5274,23 +5853,40 @@
   }
 
   var booted = false;
+  var ready = null;
 
   function init() {
     if (booted) return;
     booted = true;
-    load();
     bind();
     syncAppHeight();
-    if (state.loadWarning) setTimeout(function () { toast(state.loadWarning); }, 400);
+
+    /* 첫 화면은 옛 localStorage 사본으로 바로 그리고, IndexedDB 를 읽은 뒤에 맞춥니다. */
+    var early = readLocalLibrary();
+    if (early.payload) applyLibrary(early.payload);
+    readMeta();
     setView('shelf');
     renderAll();
 
-    /* 공유 링크(?room=...)로 열렸으면 바로 실시간 공유 모드로 시작합니다. */
-    var linkedRoom = roomFromUrl();
-    if (linkedRoom) {
-      if (shareConfigured()) startShare(linkedRoom, { upload: false });
-      else setTimeout(function () { toast('공유 링크지만 Firebase 설정이 없어 이 기기 기록으로 열었어요.'); }, 500);
-    }
+    ready = load(early).then(function () {
+      store.ready = true;
+      renderAll();
+      if (state.loadWarning) setTimeout(function () { toast(state.loadWarning); }, 400);
+      if (store.migrated) {
+        setTimeout(function () {
+          toast('기존 기록 ' + store.migrated + '권을 IndexedDB 로 옮겼어요. 이제 사진을 더 넣을 수 있습니다.');
+        }, 700);
+      }
+      refreshStorageEstimate();
+
+      /* 공유 링크(?room=...)로 열렸으면 바로 실시간 공유 모드로 시작합니다. */
+      var linkedRoom = roomFromUrl();
+      if (linkedRoom) {
+        if (shareConfigured()) startShare(linkedRoom, { upload: false });
+        else setTimeout(function () { toast('공유 링크지만 Firebase 설정이 없어 이 기기 기록으로 열었어요.'); }, 500);
+      }
+      return state;
+    });
   }
 
   if (document.readyState === 'loading') {
@@ -5303,6 +5899,10 @@
   window.BookTracker = {
     STORAGE_KEY: STORAGE_KEY,
     META_KEY: META_KEY,
+    IDB_NAME: IDB_NAME,
+    IDB_STORE: IDB_STORE,
+    IDB_KEY: IDB_KEY,
+    MIGRATED_KEY: MIGRATED_KEY,
     STATUSES: STATUSES,
     state: state,
     normalizeStatus: normalizeStatus,
@@ -5350,11 +5950,24 @@
     GEMINI_MODELS: GEMINI_MODELS,
     GEMINI_URL: GEMINI_URL,
     storageUsage: storageUsage,
+    storageState: storageState,
+    readPersisted: readPersisted,
+    formatBytes: formatBytes,
+    storageUsageText: storageUsageText,
+    refreshStorageEstimate: refreshStorageEstimate,
+    galleryWarnChars: galleryWarnChars,
+    mergeGalleryLists: mergeGalleryLists,
+    galleryItemFromDoc: galleryItemFromDoc,
+    prepareGalleryDoc: prepareGalleryDoc,
+    syncGalleryItems: syncGalleryItems,
+    shareGalleryPath: SHARE_GALLERY_COLLECTION,
+    SHARE_GALLERY_MAX_CHARS: SHARE_GALLERY_MAX_CHARS,
     cardHTML: cardHTML,
     save: save,
     load: load,
     renderAll: renderAll,
     setView: setView,
+    whenReady: function () { return ready || Promise.resolve(state); },
     storageOk: storage.ok
   };
 })();
