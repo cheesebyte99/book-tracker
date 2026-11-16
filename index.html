@@ -3154,22 +3154,34 @@
 
     var photoCount = 0;
     var photoKB = 0;
+    var albumCount = 0;
+    var albumItemsTotal = 0;
+    var albumKB = 0;
     for (var pi = 0; pi < state.books.length; pi++) {
       if (normalizePhoto(state.books[pi].photo)) {
         photoCount += 1;
         photoKB += photoSizeKB(state.books[pi].photo);
       }
+      var albumItems = bookGallery(state.books[pi]);
+      if (albumItems.length) {
+        albumCount += 1;
+        albumItemsTotal += albumItems.length;
+        albumKB += galleryTotalKB(albumItems);
+      }
     }
     var usage = storageUsage();
     html += '<div class="kv-row"><span class="k">사진 있는 책</span><span class="v">' + photoCount + '권' +
       (photoCount ? ' · 약 ' + formatKB(photoKB) : '') + '</span></div>';
+    html += '<div class="kv-row"><span class="k">📸 책 사진첩</span><span class="v">' + albumCount + '권' +
+      (albumCount ? ' · 사진 ' + albumItemsTotal + '장 · 약 ' + formatKB(albumKB) : '') + '</span></div>';
     html += '<div class="kv-row"><span class="k">저장 공간</span><span class="v ' +
       (usage.percent >= 80 ? 'warn' : (usage.percent >= 60 ? '' : 'ok')) + '">약 ' + usage.percent + '% 사용' +
       (usage.percent >= 80 ? ' · 거의 꽉 참' : '') + '</span></div>';
 
     html += '<p class="hint">기록은 이 휴대폰 브라우저 안(localStorage)에만 저장되고 서버로 보내지 않습니다. ' +
       '인터넷 없이도 열리며, 휴대폰을 바꾸거나 브라우저 데이터를 지울 때는 먼저 JSON으로 백업해 두세요. ' +
-      '사진은 넣을 때 긴 변 600px JPEG로 자동으로 줄여 저장합니다(한 장에 대략 30~150KB).</p></div>';
+      '사진은 넣을 때 긴 변 600px JPEG로 자동으로 줄여 저장합니다(한 장에 대략 30~150KB). ' +
+      '📸 사진첩 사진은 글씨가 읽히도록 긴 변 1000px로 저장합니다(한 장 80~180KB).</p></div>';
 
     html += '<div class="panel"><h3>📤 내보내기</h3><div class="btn-stack">';
     html += '<button type="button" class="btn block" data-action="export-json">JSON으로 내보내기 (books.json)</button>';
