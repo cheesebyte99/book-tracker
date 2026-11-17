@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -17,6 +18,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -54,10 +56,15 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // WebView 는 자기 padding 을 무시하고 화면 끝까지 그리므로, 바깥 틀에 여백을 준다.
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(getColor(R.color.app_bg));
         webView = new WebView(this);
         webView.setBackgroundColor(getColor(R.color.app_bg));
-        setContentView(webView);
-        applyInsets(webView);
+        root.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(root);
+        applyInsets(root);
 
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -135,7 +142,7 @@ public class MainActivity extends Activity {
                 });
     }
 
-    /** 상태바·내비게이션 바·키보드 영역만큼 WebView 를 안쪽으로 밀어 넣는다(Android 15 전체 화면 대응). */
+    /** 상태바·내비게이션 바·키보드 영역만큼 WebView 를 감싼 틀을 안쪽으로 밀어 넣는다(Android 15 전체 화면 대응). */
     private static void applyInsets(View view) {
         ViewCompat.setOnApplyWindowInsetsListener(view, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
