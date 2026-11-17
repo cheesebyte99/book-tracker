@@ -139,7 +139,7 @@
   .weekdays span { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); padding: 5px 0; }
   .weekdays span:first-child { color: var(--sun); }
   .weekdays span:last-child { color: var(--sat); }
-  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
   .day-cell {
     position: relative; aspect-ratio: 1 / 1.04; border: 0; background: transparent; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; padding: 5px 0 0; gap: 3px;
@@ -158,6 +158,17 @@
   .dots { display: flex; align-items: center; gap: 3px; min-height: 7px; }
   .dot { width: 5px; height: 5px; border-radius: 50%; display: block; }
   .dots .more { font-size: 9px; font-weight: 800; color: var(--muted); line-height: 1; }
+  .lane-space { display: block; flex: 0 0 auto; }
+  /* 기간 일정 바: 같은 주(줄) 안에서 시작~끝 칸을 가로질러 그린다 */
+  .span-bar {
+    align-self: start; z-index: 2; pointer-events: none; min-width: 0;
+    height: 14px; margin: 0 3px; padding: 0 5px; border-radius: 5px;
+    color: #fff; font-size: 10px; font-weight: 800; line-height: 14px; letter-spacing: -.2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .span-bar.cont-left { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .span-bar.cont-right { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .span-bar.dim { opacity: .45; }
 
   /* ── 날짜별 일정 ── */
   .day-card {
@@ -251,6 +262,7 @@
   .field-row { display: flex; gap: 10px; }
   .field-row .field { flex: 1; min-width: 0; }
   .field-row.disabled { opacity: .5; }
+  .field[hidden] { display: none; }
   .switch-row { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 13px; font-weight: 700; }
   .switch-row input { width: 18px; height: 18px; accent-color: var(--primary); }
   .color-picker { display: flex; gap: 7px; flex-wrap: wrap; }
@@ -366,9 +378,19 @@
         <span>제목 *</span>
         <input id="fTitle" type="text" maxlength="60" placeholder="예: 친구랑 저녁 약속" autocomplete="off" required>
       </label>
-      <label class="field">
-        <span>날짜</span>
-        <input id="fDate" type="date" required>
+      <div class="field-row">
+        <label class="field">
+          <span id="fDateLabel">날짜</span>
+          <input id="fDate" type="date" required>
+        </label>
+        <label id="endDateField" class="field" hidden>
+          <span>종료 날짜</span>
+          <input id="fEndDate" type="date">
+        </label>
+      </div>
+      <label class="switch-row">
+        <input id="fRange" type="checkbox">
+        <span>기간 일정 (여러 날)</span>
       </label>
       <label class="switch-row">
         <input id="fAllDay" type="checkbox">
@@ -507,6 +529,25 @@
     var d = parseInt(parts[2], 10);
     if (!y || !m || !d) return new Date();
     return new Date(y, m - 1, d);
+  }
+
+  function addDays(key, n) {
+    var d = parseKey(key);
+    d.setDate(d.getDate() + n);
+    return toDateKey(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((parseKey(b) - parseKey(a)) / 86400000);
+  }
+
+  function isValidKey(key) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(key || ''));
+  }
+
+  function shortDate(key) {
+    var d = parseKey(key);
+    return (d.getMonth() + 1) + '/' + d.getDate() + '(' + WEEKDAYS[d.getDay()] + ')';
   }
 
   function colorOf(key) {
@@ -649,6 +690,8 @@
       id: id || data.id || '',
       title: String(data.title || ''),
       date: String(data.date || ''),
+      // 기간 일정의 마지막 날(포함). 하루 일정이면 '' — 예전 일정·예전 앱과 그대로 호환된다
+      endDate: isValidKey(data.endDate) && String(data.endDate) > String(data.date || '') ? String(data.endDate) : '',
       allDay: !!data.allDay,
       startTime: data.startTime ? String(data.startTime) : '',
       endTime: data.endTime ? String(data.endTime) : '',
@@ -658,7 +701,21 @@
     };
   }
 
+  function isMultiDay(ev) { return !!ev.endDate; }
+
+  function lastDay(ev) { return ev.endDate || ev.date; }
+
+  function occursOn(ev, key) { return !!ev.date && ev.date <= key && key <= lastDay(ev); }
+
   function timeLabel(ev) {
+    if (isMultiDay(ev)) {
+      var days = daysBetween(ev.date, ev.endDate) + 1;
+      if (ev.allDay || !ev.startTime) {
+        return shortDate(ev.date) + ' ~ ' + shortDate(ev.endDate) + ' · ' + days + '일';
+      }
+      return shortDate(ev.date) + ' ' + ev.startTime + ' ~ ' + shortDate(ev.endDate) +
+        (ev.endTime ? ' ' + ev.endTime : '') + ' · ' + days + '일';
+    }
     if (ev.allDay) return '종일';
     if (ev.startTime && ev.endTime) return ev.startTime + ' ~ ' + ev.endTime;
     if (ev.startTime) return ev.startTime;
@@ -666,6 +723,8 @@
   }
 
   function compareEvents(a, b) {
+    if (isMultiDay(a) !== isMultiDay(b)) return isMultiDay(a) ? -1 : 1;
+    if (isMultiDay(a) && a.date !== b.date) return a.date < b.date ? -1 : 1;
     if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
     var at = a.startTime || '99:99';
     var bt = b.startTime || '99:99';
@@ -677,7 +736,7 @@
     var map = {};
     for (var i = 0; i < state.events.length; i++) {
       var ev = state.events[i];
-      if (!ev.date) continue;
+      if (!ev.date || isMultiDay(ev)) continue; // 기간 일정은 점 대신 바로 그린다
       if (!map[ev.date]) map[ev.date] = [];
       map[ev.date].push(ev);
     }
@@ -756,10 +815,12 @@
     var mod = fs.mod;
     if (id) {
       var updatePayload = Object.assign({}, payload);
+      if (updatePayload.endDate === null) updatePayload.endDate = mod.deleteField();
       updatePayload.updatedAt = mod.serverTimestamp();
       return mod.updateDoc(mod.doc(fs.db, 'rooms', state.roomId, 'events', id), updatePayload);
     }
     var createPayload = Object.assign({}, payload);
+    if (createPayload.endDate === null) delete createPayload.endDate;
     createPayload.createdAt = mod.serverTimestamp();
     createPayload.updatedAt = mod.serverTimestamp();
     return mod.addDoc(mod.collection(fs.db, 'rooms', state.roomId, 'events'), createPayload);
@@ -905,6 +966,48 @@
     renderDayList();
   }
 
+  var MAX_LANES = 3;
+  var LANE_H = 16;
+
+  /* 한 주(7칸)에 걸치는 기간 일정을 줄(lane)에 배치한다 — 겹치지 않으면 같은 줄을 쓴다 */
+  function layoutWeek(weekStart, weekEnd) {
+    var segs = [];
+    for (var i = 0; i < state.events.length; i++) {
+      var ev = state.events[i];
+      if (!isMultiDay(ev) || ev.date > weekEnd || ev.endDate < weekStart) continue;
+      var from = ev.date > weekStart ? ev.date : weekStart;
+      var to = ev.endDate < weekEnd ? ev.endDate : weekEnd;
+      segs.push({
+        ev: ev,
+        col: daysBetween(weekStart, from),
+        span: daysBetween(from, to) + 1,
+        contLeft: ev.date < weekStart,
+        contRight: ev.endDate > weekEnd
+      });
+    }
+    segs.sort(function (a, b) {
+      if (a.col !== b.col) return a.col - b.col;
+      if (a.span !== b.span) return b.span - a.span;
+      return compareEvents(a.ev, b.ev);
+    });
+    var laneEnds = [];
+    var hiddenByCol = [[], [], [], [], [], [], []];
+    var shown = [];
+    for (var j = 0; j < segs.length; j++) {
+      var seg = segs[j];
+      var lane = 0;
+      while (lane < laneEnds.length && laneEnds[lane] >= seg.col) lane++;
+      laneEnds[lane] = seg.col + seg.span - 1;
+      if (lane < MAX_LANES) {
+        seg.lane = lane;
+        shown.push(seg);
+      } else {
+        for (var c = seg.col; c < seg.col + seg.span; c++) hiddenByCol[c].push(seg.ev);
+      }
+    }
+    return { segs: shown, lanes: Math.min(laneEnds.length, MAX_LANES), hiddenByCol: hiddenByCol };
+  }
+
   function renderCalendar() {
     if (!el.calendarGrid) return;
     el.monthTitle.textContent = state.viewYear + '년 ' + (state.viewMonth + 1) + '월';
@@ -914,51 +1017,92 @@
     var total = startDow + daysInMonth <= 35 ? 35 : 42;
     var today = todayKey();
     var frag = document.createDocumentFragment();
+    var firstKey = toDateKey(state.viewYear, state.viewMonth, 1 - startDow);
 
-    for (var i = 0; i < total; i++) {
-      var dnum = i - startDow + 1;
-      var cellDate = new Date(state.viewYear, state.viewMonth, dnum);
-      var key = toDateKey(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
-      var outside = cellDate.getMonth() !== state.viewMonth || cellDate.getFullYear() !== state.viewYear;
-      var dayEvents = map[key] || [];
+    for (var w = 0; w < total / 7; w++) {
+      var weekStart = addDays(firstKey, w * 7);
+      var week = layoutWeek(weekStart, addDays(weekStart, 6));
 
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'day-cell';
-      btn.setAttribute('data-date', key);
-      if (outside) btn.classList.add('outside');
-      if (cellDate.getDay() === 0) btn.classList.add('sun');
-      if (cellDate.getDay() === 6) btn.classList.add('sat');
-      if (key === today) btn.classList.add('today');
-      if (key === state.selectedDate) btn.classList.add('selected');
+      for (var col = 0; col < 7; col++) {
+        var i = w * 7 + col;
+        var dnum = i - startDow + 1;
+        var cellDate = new Date(state.viewYear, state.viewMonth, dnum);
+        var key = toDateKey(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+        var outside = cellDate.getMonth() !== state.viewMonth || cellDate.getFullYear() !== state.viewYear;
+        var dayEvents = (map[key] || []).concat(week.hiddenByCol[col]);
+        var rangeCount = 0;
+        for (var r = 0; r < week.segs.length; r++) {
+          var sg = week.segs[r];
+          if (col >= sg.col && col < sg.col + sg.span) rangeCount++;
+        }
 
-      var num = document.createElement('span');
-      num.className = 'num';
-      num.textContent = String(cellDate.getDate());
-      btn.appendChild(num);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'day-cell';
+        btn.style.gridRow = String(w + 1);
+        btn.style.gridColumn = String(col + 1);
+        btn.setAttribute('data-date', key);
+        if (outside) btn.classList.add('outside');
+        if (cellDate.getDay() === 0) btn.classList.add('sun');
+        if (cellDate.getDay() === 6) btn.classList.add('sat');
+        if (key === today) btn.classList.add('today');
+        if (key === state.selectedDate) btn.classList.add('selected');
 
-      var dots = document.createElement('span');
-      dots.className = 'dots';
-      var shown = Math.min(dayEvents.length, 3);
-      for (var k = 0; k < shown; k++) {
-        var dot = document.createElement('span');
-        dot.className = 'dot';
-        dot.style.background = colorOf(dayEvents[k].color);
-        dots.appendChild(dot);
+        var num = document.createElement('span');
+        num.className = 'num';
+        num.textContent = String(cellDate.getDate());
+        btn.appendChild(num);
+
+        if (week.lanes) {
+          var space = document.createElement('span');
+          space.className = 'lane-space';
+          space.style.height = (week.lanes * LANE_H - 3) + 'px';
+          btn.appendChild(space);
+        }
+
+        var dots = document.createElement('span');
+        dots.className = 'dots';
+        var shown = Math.min(dayEvents.length, 3);
+        for (var k = 0; k < shown; k++) {
+          var dot = document.createElement('span');
+          dot.className = 'dot';
+          dot.style.background = colorOf(dayEvents[k].color);
+          dots.appendChild(dot);
+        }
+        if (dayEvents.length > shown) {
+          var more = document.createElement('span');
+          more.className = 'more';
+          more.textContent = '+' + (dayEvents.length - shown);
+          dots.appendChild(more);
+        }
+        btn.appendChild(dots);
+
+        btn.setAttribute('aria-label',
+          (cellDate.getMonth() + 1) + '월 ' + cellDate.getDate() + '일, 일정 ' + (dayEvents.length + rangeCount) + '개');
+        if (key === state.selectedDate) btn.setAttribute('aria-current', 'date');
+
+        frag.appendChild(btn);
       }
-      if (dayEvents.length > shown) {
-        var more = document.createElement('span');
-        more.className = 'more';
-        more.textContent = '+' + (dayEvents.length - shown);
-        dots.appendChild(more);
+
+      for (var b = 0; b < week.segs.length; b++) {
+        var seg = week.segs[b];
+        var bar = document.createElement('span');
+        bar.className = 'span-bar';
+        if (seg.contLeft) bar.classList.add('cont-left');
+        if (seg.contRight) bar.classList.add('cont-right');
+        var segStart = addDays(weekStart, seg.col);
+        var segEnd = addDays(weekStart, seg.col + seg.span - 1);
+        var segMonthStart = toDateKey(state.viewYear, state.viewMonth, 1);
+        var segMonthEnd = toDateKey(state.viewYear, state.viewMonth, daysInMonth);
+        if (segEnd < segMonthStart || segStart > segMonthEnd) bar.classList.add('dim');
+        bar.style.gridRow = String(w + 1);
+        bar.style.gridColumn = (seg.col + 1) + ' / span ' + seg.span;
+        bar.style.marginTop = (35 + seg.lane * LANE_H) + 'px';
+        bar.style.background = colorOf(seg.ev.color);
+        bar.textContent = seg.ev.title;
+        bar.setAttribute('aria-hidden', 'true');
+        frag.appendChild(bar);
       }
-      btn.appendChild(dots);
-
-      btn.setAttribute('aria-label',
-        (cellDate.getMonth() + 1) + '월 ' + cellDate.getDate() + '일, 일정 ' + dayEvents.length + '개');
-      if (key === state.selectedDate) btn.setAttribute('aria-current', 'date');
-
-      frag.appendChild(btn);
     }
 
     el.calendarGrid.innerHTML = '';
@@ -1031,7 +1175,7 @@
 
     var list = [];
     for (var i = 0; i < state.events.length; i++) {
-      if (state.events[i].date === state.selectedDate) list.push(state.events[i]);
+      if (occursOn(state.events[i], state.selectedDate)) list.push(state.events[i]);
     }
     list.sort(compareEvents);
 
@@ -1130,6 +1274,16 @@
     }
   }
 
+  function syncRangeRow() {
+    var range = el.fRange.checked;
+    el.endDateField.hidden = !range;
+    el.fDateLabel.textContent = range ? '시작 날짜' : '날짜';
+    if (range && isValidKey(el.fDate.value) && (!el.fEndDate.value || el.fEndDate.value <= el.fDate.value)) {
+      el.fEndDate.value = addDays(el.fDate.value, 1);
+    }
+    if (range) el.fEndDate.min = el.fDate.value || '';
+  }
+
   function syncTimeRow() {
     var allDay = el.fAllDay.checked;
     el.fStart.disabled = allDay;
@@ -1150,6 +1304,8 @@
       el.eventModalTitle.textContent = '일정 수정';
       el.fTitle.value = ev.title;
       el.fDate.value = ev.date;
+      el.fRange.checked = isMultiDay(ev);
+      el.fEndDate.value = ev.endDate || '';
       el.fAllDay.checked = ev.allDay;
       el.fStart.value = ev.startTime || '';
       el.fEnd.value = ev.endTime || '';
@@ -1161,6 +1317,8 @@
       el.eventModalTitle.textContent = '일정 추가';
       el.eventForm.reset();
       el.fDate.value = state.selectedDate;
+      el.fRange.checked = false;
+      el.fEndDate.value = '';
       el.fAllDay.checked = false;
       el.fStart.value = '';
       el.fEnd.value = '';
@@ -1170,6 +1328,7 @@
       el.deleteBtn.hidden = true;
     }
 
+    syncRangeRow();
     syncTimeRow();
     openModal(el.eventModal);
     try {
@@ -1251,6 +1410,8 @@
 
     var title = el.fTitle.value.trim();
     var date = el.fDate.value;
+    var range = el.fRange.checked;
+    var endDate = el.fEndDate.value;
     var allDay = el.fAllDay.checked;
     var start = el.fStart.value;
     var end = el.fEnd.value;
@@ -1259,9 +1420,14 @@
 
     if (!title) { showFormError('제목을 입력해 주세요.'); el.fTitle.focus(); return; }
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { showFormError('날짜를 선택해 주세요.'); el.fDate.focus(); return; }
+    if (range) {
+      if (!isValidKey(endDate)) { showFormError('종료 날짜를 선택해 주세요.'); el.fEndDate.focus(); return; }
+      if (endDate < date) { showFormError('종료 날짜가 시작 날짜보다 빨라요.'); el.fEndDate.focus(); return; }
+      if (endDate === date) range = false; // 같은 날이면 하루 일정으로 저장
+    }
     if (!allDay) {
       if (!start) { showFormError('시작 시간을 고르거나 「종일 일정」을 체크해 주세요.'); el.fStart.focus(); return; }
-      if (end && end < start) { showFormError('종료 시간이 시작 시간보다 빨라요.'); el.fEnd.focus(); return; }
+      if (!range && end && end < start) { showFormError('종료 시간이 시작 시간보다 빨라요.'); el.fEnd.focus(); return; }
     }
     clearFormError();
 
@@ -1275,6 +1441,10 @@
       memo: memo,
       author: author || '익명'
     };
+    // endDate 는 기간 일정일 때만 보낸다(하루 일정 문서 모양은 예전과 똑같이 유지)
+    var editing = state.editingId ? findEvent(state.editingId) : null;
+    if (range) payload.endDate = endDate;
+    else if (editing && editing.endDate) payload.endDate = null; // 기간 → 하루로 바꾸면 지운다
 
     var isEdit = !!state.editingId;
     state.busy = true;
@@ -1290,7 +1460,11 @@
       toast(isEdit ? '일정을 수정했어요' : '일정을 추가했어요');
     } catch (err) {
       console.warn('[save]', err);
-      showFormError('저장하지 못했어요: ' + errMessage(err));
+      if (err && err.code === 'permission-denied' && payload.endDate) {
+        showFormError('기간 일정을 저장하지 못했어요. Firestore 규칙에서 endDate 를 아직 허용하지 않아요(하루 일정은 그대로 저장돼요).');
+      } else {
+        showFormError('저장하지 못했어요: ' + errMessage(err));
+      }
     } finally {
       state.busy = false;
       el.saveBtn.disabled = false;
@@ -1333,7 +1507,7 @@
         memo: '강남역 2번 출구에서 만나기', author: getSavedAuthor() || '나'
       },
       {
-        title: '제주도 여행', date: nextKey, allDay: true,
+        title: '제주도 여행', date: nextKey, endDate: addDays(nextKey, 2), allDay: true,
         startTime: null, endTime: null, color: 'trip',
         memo: '숙소 체크인 15:00 · 렌터카 예약', author: '지우'
       }
@@ -1372,6 +1546,10 @@
     el.eventForm = document.getElementById('eventForm');
     el.fTitle = document.getElementById('fTitle');
     el.fDate = document.getElementById('fDate');
+    el.fDateLabel = document.getElementById('fDateLabel');
+    el.fRange = document.getElementById('fRange');
+    el.endDateField = document.getElementById('endDateField');
+    el.fEndDate = document.getElementById('fEndDate');
     el.fAllDay = document.getElementById('fAllDay');
     el.timeRow = document.getElementById('timeRow');
     el.fStart = document.getElementById('fStart');
@@ -1420,6 +1598,8 @@
 
     el.seedBtn.addEventListener('click', seedSamples);
     el.fAllDay.addEventListener('change', syncTimeRow);
+    el.fRange.addEventListener('change', syncRangeRow);
+    el.fDate.addEventListener('change', function () { if (el.fRange.checked) syncRangeRow(); });
 
     el.colorPicker.addEventListener('click', function (e) {
       var opt = e.target.closest ? e.target.closest('.color-opt') : null;
