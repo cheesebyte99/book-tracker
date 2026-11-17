@@ -57,8 +57,7 @@
     font-size: 15px;
     line-height: 1.45;
     min-height: 100vh;
-    padding-bottom: calc(104px + env(safe-area-inset-bottom));
-    overflow-x: hidden;
+    overflow: hidden;
   }
   body::before {
     content: "";
@@ -69,19 +68,23 @@
     pointer-events: none;
     z-index: 0;
   }
-  .app { position: relative; z-index: 1; max-width: 520px; margin: 0 auto; padding: 14px 14px 0; }
+  /* 한 화면 달력: 위 막대 + 요일 + 달력이 화면 높이를 꽉 채운다 */
+  .app {
+    position: relative; z-index: 1; max-width: 720px; margin: 0 auto;
+    height: 100vh; height: 100dvh; display: flex; flex-direction: column;
+    padding: 8px 6px env(safe-area-inset-bottom);
+  }
   button { font-family: inherit; }
 
   /* ── 상단 바 ── */
-  .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 4px 2px 14px; }
-  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .brand-icon { font-size: 24px; line-height: 1; }
-  .brand h1 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.3px; }
-  .brand-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 6px 4px; }
+  .month-nav { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  .month-nav h2 { margin: 0 4px; font-size: 20px; font-weight: 800; letter-spacing: -.5px; white-space: nowrap; }
+  .subbar { display: flex; align-items: center; gap: 6px; padding: 0 8px 6px; min-height: 18px; }
   .room-chip {
     border: 0; background: none; padding: 0; margin: 0; cursor: pointer;
     color: var(--muted); font-size: 11.5px; font-weight: 600;
-    text-decoration: underline dotted; max-width: 130px; overflow: hidden;
+    text-decoration: underline dotted; max-width: 160px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
   }
   .sync-chip {
@@ -93,14 +96,14 @@
   @media (prefers-color-scheme: dark) { .sync-chip.live { color: #34d399; } }
   .btn-share {
     flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--text);
-    border-radius: 999px; padding: 9px 13px; font-size: 12.5px; font-weight: 700;
+    border-radius: 999px; padding: 8px 12px; font-size: 12.5px; font-weight: 700;
     cursor: pointer; box-shadow: var(--shadow); white-space: nowrap;
   }
   .btn-share:active { transform: scale(.97); }
 
   /* ── 모드 배너 ── */
   .banner {
-    border-radius: 15px; padding: 11px 13px; margin: 0 0 13px;
+    border-radius: 12px; padding: 8px 11px; margin: 0 4px 6px;
     font-size: 12.5px; line-height: 1.55;
     background: #fff8e6; color: #8a5b00; border: 1px solid #ffe2a8;
   }
@@ -117,68 +120,64 @@
   .banner-steps ol { margin: 7px 0 0; padding-left: 18px; }
   .banner-steps li { margin-bottom: 4px; }
 
-  /* ── 월간 캘린더 ── */
-  .month-card {
-    background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 14px 11px 9px; margin-bottom: 14px;
-  }
-  .month-head { display: flex; align-items: center; justify-content: space-between; margin: 0 3px 8px; }
-  .month-title { display: flex; align-items: center; gap: 9px; }
-  .month-title h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -.4px; }
+  /* ── 월간 캘린더 (한 화면) ── */
   .today-btn {
     border: 1px solid var(--line); background: transparent; color: var(--muted);
-    border-radius: 999px; padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+    border-radius: 999px; padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; margin-left: 4px;
   }
   .nav-btn {
-    width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--surface-2);
-    color: var(--text); font-size: 20px; line-height: 1; cursor: pointer; display: grid; place-items: center;
+    width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent;
+    color: var(--text); font-size: 22px; line-height: 1; cursor: pointer; display: grid; place-items: center;
     padding-bottom: 2px;
   }
   .nav-btn:active { background: var(--line); }
-  .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 2px; }
-  .weekdays span { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); padding: 5px 0; }
+  .weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+  .weekdays span { text-align: center; font-size: 11.5px; font-weight: 700; color: var(--muted); padding: 4px 0 6px; }
   .weekdays span:first-child { color: var(--sun); }
   .weekdays span:last-child { color: var(--sat); }
-  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+  .grid {
+    flex: 1; min-height: 0; overflow: hidden; position: relative;
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+    touch-action: pan-y;
+  }
   .day-cell {
-    position: relative; aspect-ratio: 1 / 1.04; border: 0; background: transparent; cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; padding: 5px 0 0; gap: 3px;
-    border-radius: 12px; color: var(--text); transition: background .15s ease;
+    position: relative; min-width: 0; min-height: 0; border: 0; border-top: 1px solid var(--line);
+    background: transparent; cursor: pointer; padding: 3px 0 0; margin: 0;
+    display: flex; flex-direction: column; align-items: center;
+    color: var(--text); font: inherit; transition: background .15s ease;
   }
   .day-cell .num {
-    width: 27px; height: 27px; display: flex; align-items: center; justify-content: center;
-    border-radius: 50%; font-size: 13.5px; font-weight: 600; line-height: 1;
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; font-size: 13px; font-weight: 600; line-height: 1;
   }
   .day-cell.outside .num { color: var(--faint); }
   .day-cell.sun:not(.outside) .num { color: var(--sun); }
   .day-cell.sat:not(.outside) .num { color: var(--sat); }
-  .day-cell.today .num { box-shadow: inset 0 0 0 1.6px var(--primary); color: var(--primary); font-weight: 800; }
+  .day-cell.today .num { background: var(--primary); color: #fff; font-weight: 800; }
   .day-cell.selected { background: var(--primary-soft); }
-  .day-cell.selected .num { background: var(--primary); color: #fff; font-weight: 800; box-shadow: none; }
-  .dots { display: flex; align-items: center; gap: 3px; min-height: 7px; }
-  .dot { width: 5px; height: 5px; border-radius: 50%; display: block; }
-  .dots .more { font-size: 9px; font-weight: 800; color: var(--muted); line-height: 1; }
-  .lane-space { display: block; flex: 0 0 auto; }
-  /* 기간 일정 바: 같은 주(줄) 안에서 시작~끝 칸을 가로질러 그린다 */
-  .span-bar {
+  .day-cell .more {
+    position: absolute; left: 0; right: 0; bottom: 2px; text-align: center;
+    font-size: 9.5px; font-weight: 800; color: var(--muted); line-height: 11px;
+  }
+  /* 일정 칩/바: 같은 주(줄)에서 시작~끝 칸을 가로질러 그린다 (하루 일정은 한 칸) */
+  .chip {
     align-self: start; z-index: 2; pointer-events: none; min-width: 0;
-    height: 14px; margin: 0 3px; padding: 0 5px; border-radius: 5px;
-    color: #fff; font-size: 10px; font-weight: 800; line-height: 14px; letter-spacing: -.2px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    height: 15px; margin: 0 2px; padding: 0 4px; border-radius: 4px;
+    color: #fff; font-size: 10.5px; font-weight: 700; line-height: 15px; letter-spacing: -.3px;
+    white-space: nowrap; overflow: hidden; text-overflow: clip; text-align: center;
   }
-  .span-bar.cont-left { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
-  .span-bar.cont-right { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
-  .span-bar.dim { opacity: .45; }
+  .chip.multi { text-align: center; }
+  .chip.cont-left { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .chip.cont-right { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .chip.dim { opacity: .4; }
 
-  /* ── 날짜별 일정 ── */
-  .day-card {
-    background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 15px 14px 8px;
-  }
-  .day-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }
-  .day-head h3 { margin: 0; font-size: 15.5px; font-weight: 800; letter-spacing: -.2px; }
+  /* ── 날짜 상세 (시트) ── */
+  .day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .day-head h3 { margin: 0; font-size: 16.5px; font-weight: 800; letter-spacing: -.3px; }
+  .day-head .head-right { display: flex; align-items: center; gap: 8px; }
   .day-count { font-size: 11.5px; font-weight: 700; color: var(--muted); background: var(--surface-2); padding: 3px 9px; border-radius: 999px; }
   .event-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .event-list[hidden] { display: none; }
   .event-item {
     width: 100%; display: flex; align-items: stretch; gap: 10px; text-align: left;
     border: 1px solid var(--line); background: var(--surface); border-radius: 14px;
@@ -200,7 +199,7 @@
   }
   .event-author { display: block; margin-top: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
   .event-chev { align-self: center; color: var(--faint); font-size: 18px; line-height: 1; }
-  .empty { padding: 20px 10px 24px; text-align: center; color: var(--muted); font-size: 13px; }
+  .empty { padding: 18px 10px 14px; text-align: center; color: var(--muted); font-size: 13px; }
   .empty[hidden] { display: none; }
   .empty-title { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 5px; }
   .seed-btn {
@@ -208,19 +207,50 @@
     border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer;
   }
   .seed-btn[hidden] { display: none; }
-
-  /* ── 하단 추가 버튼 ── */
-  .fab {
-    position: fixed; left: 50%; transform: translateX(-50%);
-    bottom: calc(16px + env(safe-area-inset-bottom));
-    width: min(492px, calc(100% - 28px));
-    border: 0; border-radius: 16px; padding: 15px 18px;
-    font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -.2px;
-    background: linear-gradient(135deg, #6366f1, #4338ca);
-    box-shadow: 0 12px 26px rgba(79, 70, 229, .38);
-    cursor: pointer; z-index: 20;
+  .day-add {
+    width: 100%; margin-top: 12px; border: 1px dashed var(--primary); background: var(--primary-soft);
+    color: var(--primary-ink); border-radius: 14px; padding: 12px; font-size: 14px; font-weight: 800; cursor: pointer;
   }
-  .fab:active { transform: translateX(-50%) scale(.985); }
+
+  /* ── 추가 버튼 (오른쪽 아래 동그라미) ── */
+  .fab {
+    position: fixed; z-index: 20; cursor: pointer;
+    right: max(16px, calc(50% - 344px)); bottom: calc(18px + env(safe-area-inset-bottom));
+    width: 58px; height: 58px; border-radius: 50%; border: 0;
+    font-size: 30px; font-weight: 400; line-height: 1; color: #fff; padding: 0 0 3px;
+    background: linear-gradient(135deg, #6366f1, #4338ca);
+    box-shadow: 0 10px 24px rgba(79, 70, 229, .45);
+  }
+  .fab:active { transform: scale(.95); }
+
+  /* ── 카테고리 편집 ── */
+  .cat-list { display: flex; flex-direction: column; gap: 8px; }
+  .cat-row { border: 1px solid var(--line); border-radius: 14px; padding: 8px; background: var(--surface-2); }
+  .cat-main { display: flex; align-items: center; gap: 8px; }
+  .cat-sw {
+    flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--line); cursor: pointer;
+  }
+  .cat-main input {
+    flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text);
+    border-radius: 10px; padding: 9px 10px; font-size: 14.5px; font-family: inherit;
+  }
+  .cat-del {
+    flex: 0 0 auto; border: 0; background: var(--danger-soft); color: var(--danger);
+    border-radius: 10px; padding: 9px 11px; font-size: 12.5px; font-weight: 800; cursor: pointer;
+  }
+  .palette { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-top: 8px; }
+  .palette[hidden] { display: none; }
+  .palette button {
+    aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--surface); cursor: pointer;
+    box-shadow: 0 0 0 1px var(--line); padding: 0;
+  }
+  .palette button.on { box-shadow: 0 0 0 2px var(--text); }
+  .cat-add {
+    width: 100%; margin-top: 10px; border: 1px dashed var(--line); background: transparent; color: var(--text);
+    border-radius: 12px; padding: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer;
+  }
+  .color-opt.edit { border-style: dashed; color: var(--muted); }
 
   /* ── 모달 ── */
   .modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; }
@@ -319,51 +349,49 @@
 </noscript>
 <div class="app">
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-icon" aria-hidden="true">📅</span>
-      <div>
-        <h1>우리들의 캘린더</h1>
-        <div class="brand-meta">
-          <button id="roomChip" class="room-chip" type="button" title="공유 방 바꾸기">방: 불러오는 중</button>
-          <span id="syncChip" class="sync-chip">연결 중</span>
-        </div>
-      </div>
+    <div class="month-nav">
+      <button id="prevBtn" class="nav-btn" type="button" aria-label="이전 달">‹</button>
+      <h2 id="monthTitle">—</h2>
+      <button id="nextBtn" class="nav-btn" type="button" aria-label="다음 달">›</button>
+      <button id="todayBtn" class="today-btn" type="button">오늘</button>
     </div>
     <button id="copyLinkBtn" class="btn-share" type="button">🔗 링크 복사</button>
   </header>
+  <div class="subbar">
+    <button id="roomChip" class="room-chip" type="button" title="공유 방 바꾸기">방: 불러오는 중</button>
+    <span id="syncChip" class="sync-chip">연결 중</span>
+  </div>
 
   <div id="modeBanner" class="banner" hidden></div>
 
-  <section class="month-card" aria-label="월간 캘린더">
-    <div class="month-head">
-      <button id="prevBtn" class="nav-btn" type="button" aria-label="이전 달">‹</button>
-      <div class="month-title">
-        <h2 id="monthTitle">—</h2>
-        <button id="todayBtn" class="today-btn" type="button">오늘</button>
-      </div>
-      <button id="nextBtn" class="nav-btn" type="button" aria-label="다음 달">›</button>
-    </div>
-    <div class="weekdays" aria-hidden="true">
-      <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
-    </div>
-    <div id="calendarGrid" class="grid" role="group" aria-label="날짜 선택"></div>
-  </section>
+  <div class="weekdays" aria-hidden="true">
+    <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+  </div>
+  <div id="calendarGrid" class="grid" role="group" aria-label="날짜 선택 — 날짜를 누르면 그 날 일정을 자세히 봐요"></div>
+</div>
 
-  <section id="dayCard" class="day-card" aria-live="polite">
+<button id="addBtn" class="fab" type="button" aria-label="일정 추가">＋</button>
+
+<!-- 날짜 상세 모달 -->
+<div id="dayModal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dayTitle">
     <div class="day-head">
       <h3 id="dayTitle">—</h3>
-      <span id="dayCount" class="day-count">일정 없음</span>
+      <div class="head-right">
+        <span id="dayCount" class="day-count">일정 없음</span>
+        <button class="icon-btn" type="button" data-close="1" aria-label="닫기">✕</button>
+      </div>
     </div>
     <ul id="eventList" class="event-list"></ul>
     <div id="emptyState" class="empty" hidden>
       <div class="empty-title">이 날은 비어 있어요</div>
-      <div>아래 <b>＋ 일정 추가</b> 버튼으로 첫 일정을 적어 보세요.</div>
+      <div>아래 버튼으로 일정을 적어 보세요.</div>
       <button id="seedBtn" class="seed-btn" type="button" hidden>예시 일정 넣어 보기</button>
     </div>
-  </section>
+    <button id="dayAddBtn" class="day-add" type="button">＋ 이 날에 일정 추가</button>
+  </div>
 </div>
-
-<button id="addBtn" class="fab" type="button">＋ 일정 추가</button>
 
 <!-- 일정 추가/수정 모달 -->
 <div id="eventModal" class="modal" hidden>
@@ -407,7 +435,7 @@
         </label>
       </div>
       <div class="field">
-        <span>색상 / 카테고리</span>
+        <span>카테고리</span>
         <div id="colorPicker" class="color-picker" role="group" aria-label="색상 선택"></div>
       </div>
       <label class="field">
@@ -426,6 +454,27 @@
         <button id="saveBtn" class="btn-primary" type="submit">저장</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- 카테고리 편집 모달 -->
+<div id="catModal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="catModalTitle">
+    <div class="sheet-head">
+      <h3 id="catModalTitle">카테고리 편집</h3>
+      <button class="icon-btn" type="button" data-close="1" aria-label="닫기">✕</button>
+    </div>
+    <p class="hint">색 네모를 눌러 색을 바꾸고, 이름을 고치고, 필요 없는 건 지워요. 카테고리는 같은 방 친구와 함께 써요.</p>
+    <div id="catList" class="cat-list"></div>
+    <button id="catAddBtn" class="cat-add" type="button">＋ 카테고리 추가</button>
+    <p id="catError" class="form-error" hidden></p>
+    <div class="sheet-actions">
+      <div class="spacer"></div>
+      <button class="btn-ghost" type="button" data-close="1">취소</button>
+      <button id="catSaveBtn" class="btn-primary" type="button">저장</button>
+    </div>
+    <p class="hint small">지운 카테고리의 일정은 지워지지 않고 「미분류」(회색)로 보여요.</p>
   </div>
 </div>
 
@@ -485,14 +534,18 @@
   var AUTHOR_KEY = 'shared-calendar:author';
   var LAST_ROOM_KEY = 'shared-calendar:last-room';
 
-  var COLORS = [
-    { key: 'meet', label: '약속', color: '#3b82f6' },
-    { key: 'trip', label: '여행', color: '#10b981' },
-    { key: 'anniv', label: '기념일', color: '#f43f5e' },
-    { key: 'etc', label: '기타', color: '#8b5cf6' }
+  var DEFAULT_CATEGORIES = [
+    { id: 'meet', name: '약속', color: '#3b82f6', order: 0 },
+    { id: 'trip', name: '여행', color: '#10b981', order: 1 },
+    { id: 'anniv', name: '기념일', color: '#f43f5e', order: 2 },
+    { id: 'etc', name: '기타', color: '#8b5cf6', order: 3 }
   ];
-  var COLOR_MAP = {};
-  COLORS.forEach(function (c) { COLOR_MAP[c.key] = c; });
+  var UNCATEGORIZED = { id: '', name: '미분류', color: '#9ca3af', order: 999 };
+  var PALETTE = [
+    '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6',
+    '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+    '#f43f5e', '#be123c', '#92400e', '#78716c', '#64748b', '#334155', '#0f766e', '#1d4ed8'
+  ];
   var WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
   var state = {
@@ -504,9 +557,14 @@
     events: [],
     editingId: null,
     selectedColor: 'meet',
+    categories: DEFAULT_CATEGORIES.slice(),
+    catsStored: false,     // 방에 카테고리가 저장돼 있으면 true, 아니면 기본 4개를 보여 준다
+    catDraft: [],
     busy: false,
     firestore: null,
-    unsub: null
+    unsub: null,
+    unsubCats: null,
+    modalStack: []
   };
 
   var el = {};
@@ -550,12 +608,37 @@
     return (d.getMonth() + 1) + '/' + d.getDate() + '(' + WEEKDAYS[d.getDay()] + ')';
   }
 
-  function colorOf(key) {
-    return COLOR_MAP[key] ? COLOR_MAP[key].color : COLOR_MAP.etc.color;
+  function catOf(key) {
+    for (var i = 0; i < state.categories.length; i++) {
+      if (state.categories[i].id === key) return state.categories[i];
+    }
+    return UNCATEGORIZED;
   }
 
-  function labelOf(key) {
-    return COLOR_MAP[key] ? COLOR_MAP[key].label : COLOR_MAP.etc.label;
+  function colorOf(key) { return catOf(key).color; }
+
+  function labelOf(key) { return catOf(key).name; }
+
+  function normalizeCategories(list) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i] || {};
+      if (!c.id || !/^#[0-9a-fA-F]{6}$/.test(String(c.color || ''))) continue;
+      out.push({ id: String(c.id), name: String(c.name || '').slice(0, 20) || '이름 없음', color: String(c.color), order: typeof c.order === 'number' ? c.order : i });
+    }
+    out.sort(function (a, b) { return a.order - b.order; });
+    return out;
+  }
+
+  function setCategories(list, stored) {
+    var cats = normalizeCategories(list);
+    state.catsStored = !!stored && cats.length > 0;
+    state.categories = state.catsStored ? cats : DEFAULT_CATEGORIES.slice();
+    if (el.colorPicker) {
+      buildColorPicker();
+      setColor(state.selectedColor);
+    }
+    renderAll();
   }
 
   function hexToSoft(hex) {
@@ -655,6 +738,18 @@
   /* ── 저장소 (미리보기 모드) ── */
   function localKey(roomId) { return STORE_PREFIX + 'events:' + roomId; }
 
+  function localCatKey(roomId) { return STORE_PREFIX + 'cats:' + roomId; }
+
+  function readLocalCats(roomId) {
+    try {
+      var raw = window.localStorage.getItem(localCatKey(roomId));
+      var list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   function readLocal(roomId) {
     try {
       var raw = window.localStorage.getItem(localKey(roomId));
@@ -695,7 +790,7 @@
       allDay: !!data.allDay,
       startTime: data.startTime ? String(data.startTime) : '',
       endTime: data.endTime ? String(data.endTime) : '',
-      color: COLOR_MAP[data.color] ? data.color : 'etc',
+      color: data.color ? String(data.color) : '',
       memo: String(data.memo || ''),
       author: String(data.author || '')
     };
@@ -781,6 +876,65 @@
       try { state.unsub(); } catch (e) { /* 무시 */ }
       state.unsub = null;
     }
+    if (state.unsubCats) {
+      try { state.unsubCats(); } catch (e) { /* 무시 */ }
+      state.unsubCats = null;
+    }
+  }
+
+  function subscribeCategories() {
+    var fs = state.firestore;
+    var mod = fs.mod;
+    state.unsubCats = mod.onSnapshot(
+      mod.collection(fs.db, 'rooms', state.roomId, 'categories'),
+      function (snap) {
+        var list = [];
+        snap.forEach(function (d) {
+          var data = d.data() || {};
+          list.push({ id: d.id, name: data.name, color: data.color, order: data.order });
+        });
+        setCategories(list, list.length > 0);
+      },
+      function (err) {
+        console.warn('[categories]', err);
+        setCategories([], false);
+      }
+    );
+  }
+
+  /* 편집한 카테고리 목록(rows)을 저장한다. 처음 저장할 때는 기본 4개 중 남긴 것도 함께 저장한다. */
+  function saveCategories(rows) {
+    var ordered = rows.map(function (r, i) { return { id: r.id, name: r.name, color: r.color, order: i }; });
+    if (state.mode !== 'firebase' || !state.firestore) {
+      try {
+        window.localStorage.setItem(localCatKey(state.roomId), JSON.stringify(ordered));
+      } catch (e) {
+        return Promise.reject(new Error('저장에 실패했습니다'));
+      }
+      setCategories(ordered, true);
+      return Promise.resolve();
+    }
+    var fs = state.firestore;
+    var mod = fs.mod;
+    var ops = [];
+    var before = {};
+    if (state.catsStored) {
+      state.categories.forEach(function (c) { before[c.id] = c; });
+    }
+    ordered.forEach(function (r) {
+      var ref = mod.doc(fs.db, 'rooms', state.roomId, 'categories', r.id);
+      var old = before[r.id];
+      if (!old) {
+        ops.push(mod.setDoc(ref, { name: r.name, color: r.color, order: r.order, createdAt: mod.serverTimestamp(), updatedAt: mod.serverTimestamp() }));
+      } else if (old.name !== r.name || old.color !== r.color || old.order !== r.order) {
+        ops.push(mod.updateDoc(ref, { name: r.name, color: r.color, order: r.order, updatedAt: mod.serverTimestamp() }));
+      }
+      delete before[r.id];
+    });
+    Object.keys(before).forEach(function (id) {
+      ops.push(mod.deleteDoc(mod.doc(fs.db, 'rooms', state.roomId, 'categories', id)));
+    });
+    return Promise.all(ops);
   }
 
   function subscribeFirebase() {
@@ -879,6 +1033,9 @@
   }
 
   function refreshLocal() {
+    var cats = readLocalCats(state.roomId);
+    state.catsStored = cats.length > 0;
+    state.categories = state.catsStored ? normalizeCategories(cats) : DEFAULT_CATEGORIES.slice();
     var raw = readLocal(state.roomId);
     var list = [];
     for (var i = 0; i < raw.length; i++) {
@@ -892,6 +1049,8 @@
   async function connectStore() {
     stopListening();
     state.events = [];
+    state.categories = DEFAULT_CATEGORIES.slice();
+    state.catsStored = false;
     renderAll();
 
     if (!isFirebaseConfigured()) {
@@ -908,6 +1067,7 @@
       state.mode = 'firebase';
       setBanner('ok');
       subscribeFirebase();
+      subscribeCategories();
     } catch (err) {
       console.warn('[firebase init]', err);
       state.mode = 'local';
@@ -922,9 +1082,9 @@
     var b = el.modeBanner;
     if (!b) return;
     if (kind === 'ok') {
-      b.hidden = false;
+      b.hidden = true; // 위쪽 「실시간 공유 중」 표시로 충분하다 — 달력 자리를 넓게 쓴다
       b.className = 'banner ok';
-      b.innerHTML = '🟢 <strong>실시간 공유 중</strong> — 친구가 추가·수정·삭제한 일정이 바로 반영됩니다.';
+      b.textContent = '';
     } else if (kind === 'error') {
       b.hidden = false;
       b.className = 'banner error';
@@ -963,77 +1123,84 @@
   /* ── 캘린더 렌더 ── */
   function renderAll() {
     renderCalendar();
-    renderDayList();
+    if (el.dayModal && !el.dayModal.hidden) renderDayList();
   }
 
-  var MAX_LANES = 3;
-  var LANE_H = 16;
+  var NUM_H = 26;   // 날짜 숫자 영역
+  var LANE_H = 17;  // 칩 한 줄(15px) + 간격
+  var MORE_H = 13;  // 「+n」 자리
 
-  /* 한 주(7칸)에 걸치는 기간 일정을 줄(lane)에 배치한다 — 겹치지 않으면 같은 줄을 쓴다 */
-  function layoutWeek(weekStart, weekEnd) {
+  function laneOrder(a, b) {
+    if (a.col !== b.col) return a.col - b.col;
+    if (a.span !== b.span) return b.span - a.span;
+    return compareEvents(a.ev, b.ev);
+  }
+
+  /* 한 주(7칸)에 걸치는 모든 일정을 줄(lane)에 배치한다 — 기간 일정은 여러 칸, 하루 일정은 한 칸 */
+  function layoutWeek(weekStart, weekEnd, maxLanes) {
     var segs = [];
     for (var i = 0; i < state.events.length; i++) {
       var ev = state.events[i];
-      if (!isMultiDay(ev) || ev.date > weekEnd || ev.endDate < weekStart) continue;
+      var last = lastDay(ev);
+      if (!ev.date || ev.date > weekEnd || last < weekStart) continue;
       var from = ev.date > weekStart ? ev.date : weekStart;
-      var to = ev.endDate < weekEnd ? ev.endDate : weekEnd;
+      var to = last < weekEnd ? last : weekEnd;
       segs.push({
         ev: ev,
         col: daysBetween(weekStart, from),
         span: daysBetween(from, to) + 1,
         contLeft: ev.date < weekStart,
-        contRight: ev.endDate > weekEnd
+        contRight: last > weekEnd
       });
     }
-    segs.sort(function (a, b) {
-      if (a.col !== b.col) return a.col - b.col;
-      if (a.span !== b.span) return b.span - a.span;
-      return compareEvents(a.ev, b.ev);
-    });
+    segs.sort(laneOrder);
     var laneEnds = [];
-    var hiddenByCol = [[], [], [], [], [], [], []];
+    var hidden = [0, 0, 0, 0, 0, 0, 0];
     var shown = [];
     for (var j = 0; j < segs.length; j++) {
       var seg = segs[j];
       var lane = 0;
       while (lane < laneEnds.length && laneEnds[lane] >= seg.col) lane++;
       laneEnds[lane] = seg.col + seg.span - 1;
-      if (lane < MAX_LANES) {
+      if (lane < maxLanes) {
         seg.lane = lane;
         shown.push(seg);
       } else {
-        for (var c = seg.col; c < seg.col + seg.span; c++) hiddenByCol[c].push(seg.ev);
+        for (var c = seg.col; c < seg.col + seg.span; c++) hidden[c]++;
       }
     }
-    return { segs: shown, lanes: Math.min(laneEnds.length, MAX_LANES), hiddenByCol: hiddenByCol };
+    return { segs: shown, hidden: hidden };
   }
 
   function renderCalendar() {
     if (!el.calendarGrid) return;
     el.monthTitle.textContent = state.viewYear + '년 ' + (state.viewMonth + 1) + '월';
-    var map = groupByDate();
     var startDow = new Date(state.viewYear, state.viewMonth, 1).getDay();
     var daysInMonth = new Date(state.viewYear, state.viewMonth + 1, 0).getDate();
-    var total = startDow + daysInMonth <= 35 ? 35 : 42;
+    var weeks = startDow + daysInMonth <= 35 ? 5 : 6;
     var today = todayKey();
-    var frag = document.createDocumentFragment();
-    var firstKey = toDateKey(state.viewYear, state.viewMonth, 1 - startDow);
+    var monthStart = toDateKey(state.viewYear, state.viewMonth, 1);
+    var monthEnd = toDateKey(state.viewYear, state.viewMonth, daysInMonth);
+    var firstKey = addDays(monthStart, -startDow);
 
-    for (var w = 0; w < total / 7; w++) {
+    // 칸 높이에 맞춰 몇 줄까지 칩을 보여 줄지 정한다
+    el.calendarGrid.style.gridTemplateRows = 'repeat(' + weeks + ', minmax(0, 1fr))';
+    var gridH = el.calendarGrid.clientHeight;
+    var rowH = gridH > 0 ? gridH / weeks : 90;
+    var maxLanes = Math.max(1, Math.floor((rowH - NUM_H - MORE_H) / LANE_H));
+
+    var frag = document.createDocumentFragment();
+    for (var w = 0; w < weeks; w++) {
       var weekStart = addDays(firstKey, w * 7);
-      var week = layoutWeek(weekStart, addDays(weekStart, 6));
+      var week = layoutWeek(weekStart, addDays(weekStart, 6), maxLanes);
 
       for (var col = 0; col < 7; col++) {
-        var i = w * 7 + col;
-        var dnum = i - startDow + 1;
-        var cellDate = new Date(state.viewYear, state.viewMonth, dnum);
-        var key = toDateKey(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
-        var outside = cellDate.getMonth() !== state.viewMonth || cellDate.getFullYear() !== state.viewYear;
-        var dayEvents = (map[key] || []).concat(week.hiddenByCol[col]);
-        var rangeCount = 0;
-        for (var r = 0; r < week.segs.length; r++) {
-          var sg = week.segs[r];
-          if (col >= sg.col && col < sg.col + sg.span) rangeCount++;
+        var key = addDays(weekStart, col);
+        var cellDate = parseKey(key);
+        var outside = key < monthStart || key > monthEnd;
+        var count = 0;
+        for (var n = 0; n < state.events.length; n++) {
+          if (occursOn(state.events[n], key)) count++;
         }
 
         var btn = document.createElement('button');
@@ -1043,8 +1210,8 @@
         btn.style.gridColumn = String(col + 1);
         btn.setAttribute('data-date', key);
         if (outside) btn.classList.add('outside');
-        if (cellDate.getDay() === 0) btn.classList.add('sun');
-        if (cellDate.getDay() === 6) btn.classList.add('sat');
+        if (col === 0) btn.classList.add('sun');
+        if (col === 6) btn.classList.add('sat');
         if (key === today) btn.classList.add('today');
         if (key === state.selectedDate) btn.classList.add('selected');
 
@@ -1053,55 +1220,36 @@
         num.textContent = String(cellDate.getDate());
         btn.appendChild(num);
 
-        if (week.lanes) {
-          var space = document.createElement('span');
-          space.className = 'lane-space';
-          space.style.height = (week.lanes * LANE_H - 3) + 'px';
-          btn.appendChild(space);
-        }
-
-        var dots = document.createElement('span');
-        dots.className = 'dots';
-        var shown = Math.min(dayEvents.length, 3);
-        for (var k = 0; k < shown; k++) {
-          var dot = document.createElement('span');
-          dot.className = 'dot';
-          dot.style.background = colorOf(dayEvents[k].color);
-          dots.appendChild(dot);
-        }
-        if (dayEvents.length > shown) {
+        if (week.hidden[col] > 0) {
           var more = document.createElement('span');
           more.className = 'more';
-          more.textContent = '+' + (dayEvents.length - shown);
-          dots.appendChild(more);
+          more.textContent = '+' + week.hidden[col];
+          btn.appendChild(more);
         }
-        btn.appendChild(dots);
 
         btn.setAttribute('aria-label',
-          (cellDate.getMonth() + 1) + '월 ' + cellDate.getDate() + '일, 일정 ' + (dayEvents.length + rangeCount) + '개');
+          (cellDate.getMonth() + 1) + '월 ' + cellDate.getDate() + '일, 일정 ' + count + '개');
         if (key === state.selectedDate) btn.setAttribute('aria-current', 'date');
-
         frag.appendChild(btn);
       }
 
       for (var b = 0; b < week.segs.length; b++) {
         var seg = week.segs[b];
-        var bar = document.createElement('span');
-        bar.className = 'span-bar';
-        if (seg.contLeft) bar.classList.add('cont-left');
-        if (seg.contRight) bar.classList.add('cont-right');
+        var chip = document.createElement('span');
+        chip.className = 'chip';
+        if (isMultiDay(seg.ev)) chip.classList.add('multi');
+        if (seg.contLeft) chip.classList.add('cont-left');
+        if (seg.contRight) chip.classList.add('cont-right');
         var segStart = addDays(weekStart, seg.col);
         var segEnd = addDays(weekStart, seg.col + seg.span - 1);
-        var segMonthStart = toDateKey(state.viewYear, state.viewMonth, 1);
-        var segMonthEnd = toDateKey(state.viewYear, state.viewMonth, daysInMonth);
-        if (segEnd < segMonthStart || segStart > segMonthEnd) bar.classList.add('dim');
-        bar.style.gridRow = String(w + 1);
-        bar.style.gridColumn = (seg.col + 1) + ' / span ' + seg.span;
-        bar.style.marginTop = (35 + seg.lane * LANE_H) + 'px';
-        bar.style.background = colorOf(seg.ev.color);
-        bar.textContent = seg.ev.title;
-        bar.setAttribute('aria-hidden', 'true');
-        frag.appendChild(bar);
+        if (segEnd < monthStart || segStart > monthEnd) chip.classList.add('dim');
+        chip.style.gridRow = String(w + 1);
+        chip.style.gridColumn = (seg.col + 1) + ' / span ' + seg.span;
+        chip.style.marginTop = (NUM_H + seg.lane * LANE_H) + 'px';
+        chip.style.background = colorOf(seg.ev.color);
+        chip.textContent = seg.ev.title;
+        chip.setAttribute('aria-hidden', 'true');
+        frag.appendChild(chip);
       }
     }
 
@@ -1187,6 +1335,7 @@
 
     var isEmpty = list.length === 0;
     el.emptyState.hidden = !isEmpty;
+    el.eventList.hidden = isEmpty;
     if (isEmpty) {
       el.seedBtn.hidden = state.mode !== 'local';
     }
@@ -1201,6 +1350,12 @@
       state.viewMonth = picked.getMonth();
     }
     renderAll();
+  }
+
+  function openDay(key) {
+    selectDate(key);
+    renderDayList();
+    openModal(el.dayModal);
   }
 
   function shiftMonth(delta) {
@@ -1222,18 +1377,27 @@
   function openModal(node) {
     if (!node) return;
     node.hidden = false;
-    document.body.style.overflow = 'hidden';
+    var i = state.modalStack.indexOf(node);
+    if (i !== -1) state.modalStack.splice(i, 1);
+    state.modalStack.push(node);
+    // 나중에 연 창이 위에 오도록
+    for (var k = 0; k < state.modalStack.length; k++) state.modalStack[k].style.zIndex = String(60 + k);
   }
 
   function closeModal(node) {
     if (!node) return;
     node.hidden = true;
-    document.body.style.overflow = '';
+    var i = state.modalStack.indexOf(node);
+    if (i !== -1) state.modalStack.splice(i, 1);
+  }
+
+  function closeTopModal() {
+    var top = state.modalStack[state.modalStack.length - 1];
+    if (top) closeModal(top);
   }
 
   function closeAllModals() {
-    closeModal(el.eventModal);
-    closeModal(el.roomModal);
+    while (state.modalStack.length) closeModal(state.modalStack[state.modalStack.length - 1]);
   }
 
   function showFormError(message) {
@@ -1248,24 +1412,41 @@
 
   function buildColorPicker() {
     el.colorPicker.innerHTML = '';
-    COLORS.forEach(function (c) {
+    var list = state.categories.slice();
+    // 지워진 카테고리의 일정을 고칠 때는 「미분류」도 고를 수 있게 둔다
+    // (지워진 카테고리 id 를 그대로 두어야 규칙에 맞게 다시 저장된다)
+    if (state.selectedColor && catOf(state.selectedColor) === UNCATEGORIZED) {
+      list.push({ id: state.selectedColor, name: UNCATEGORIZED.name, color: UNCATEGORIZED.color });
+    }
+    list.forEach(function (c) {
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'color-opt';
-      b.setAttribute('data-color', c.key);
+      b.setAttribute('data-color', c.id);
       var sw = document.createElement('span');
       sw.className = 'sw';
       sw.style.background = c.color;
       var text = document.createElement('span');
-      text.textContent = c.label;
+      text.textContent = c.name;
       b.appendChild(sw);
       b.appendChild(text);
       el.colorPicker.appendChild(b);
     });
+    var edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'color-opt edit';
+    edit.setAttribute('data-edit', '1');
+    edit.textContent = '✏️ 편집';
+    el.colorPicker.appendChild(edit);
   }
 
   function setColor(key) {
-    state.selectedColor = COLOR_MAP[key] ? key : 'meet';
+    var exists = false;
+    var opts0 = el.colorPicker.querySelectorAll('.color-opt[data-color]');
+    for (var j = 0; j < opts0.length; j++) {
+      if (opts0[j].getAttribute('data-color') === key) exists = true;
+    }
+    state.selectedColor = exists ? key : (state.categories[0] ? state.categories[0].id : '');
     var opts = el.colorPicker.querySelectorAll('.color-opt');
     for (var i = 0; i < opts.length; i++) {
       var active = opts[i].getAttribute('data-color') === state.selectedColor;
@@ -1309,6 +1490,8 @@
       el.fAllDay.checked = ev.allDay;
       el.fStart.value = ev.startTime || '';
       el.fEnd.value = ev.endTime || '';
+      state.selectedColor = ev.color;
+      buildColorPicker();
       setColor(ev.color);
       el.fAuthor.value = ev.author || getSavedAuthor();
       el.fMemo.value = ev.memo || '';
@@ -1322,7 +1505,9 @@
       el.fAllDay.checked = false;
       el.fStart.value = '';
       el.fEnd.value = '';
-      setColor('meet');
+      state.selectedColor = '';
+      buildColorPicker();
+      setColor(state.categories[0] ? state.categories[0].id : '');
       el.fAuthor.value = getSavedAuthor();
       el.fMemo.value = '';
       el.deleteBtn.hidden = true;
@@ -1334,6 +1519,130 @@
     try {
       el.fTitle.focus();
     } catch (e) { /* 무시 */ }
+  }
+
+  function newCatId() {
+    return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function openCatModal() {
+    state.catDraft = state.categories.map(function (c) { return { id: c.id, name: c.name, color: c.color, open: false }; });
+    el.catError.hidden = true;
+    renderCatDraft();
+    openModal(el.catModal);
+  }
+
+  function renderCatDraft() {
+    el.catList.innerHTML = '';
+    state.catDraft.forEach(function (c, idx) {
+      var row = document.createElement('div');
+      row.className = 'cat-row';
+      var main = document.createElement('div');
+      main.className = 'cat-main';
+      var sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'cat-sw';
+      sw.style.background = c.color;
+      sw.setAttribute('aria-label', c.name + ' 색 바꾸기');
+      sw.addEventListener('click', function () {
+        state.catDraft.forEach(function (o, k) { o.open = k === idx ? !o.open : false; });
+        renderCatDraft();
+      });
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 20;
+      input.value = c.name;
+      input.placeholder = '카테고리 이름';
+      input.addEventListener('input', function () { c.name = input.value; });
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'cat-del';
+      del.textContent = '삭제';
+      del.addEventListener('click', function () {
+        if (state.catDraft.length <= 1) {
+          el.catError.textContent = '카테고리는 1개 이상 있어야 해요.';
+          el.catError.hidden = false;
+          return;
+        }
+        state.catDraft.splice(idx, 1);
+        renderCatDraft();
+      });
+      main.appendChild(sw);
+      main.appendChild(input);
+      main.appendChild(del);
+      row.appendChild(main);
+
+      var pal = document.createElement('div');
+      pal.className = 'palette';
+      pal.hidden = !c.open;
+      PALETTE.forEach(function (hex) {
+        var pb = document.createElement('button');
+        pb.type = 'button';
+        pb.style.background = hex;
+        pb.setAttribute('aria-label', hex);
+        if (hex.toLowerCase() === c.color.toLowerCase()) pb.className = 'on';
+        pb.addEventListener('click', function () {
+          c.color = hex;
+          c.open = false;
+          renderCatDraft();
+        });
+        pal.appendChild(pb);
+      });
+      row.appendChild(pal);
+      el.catList.appendChild(row);
+    });
+  }
+
+  function addCatDraft() {
+    if (state.catDraft.length >= 20) {
+      el.catError.textContent = '카테고리는 20개까지 만들 수 있어요.';
+      el.catError.hidden = false;
+      return;
+    }
+    var used = state.catDraft.map(function (c) { return c.color.toLowerCase(); });
+    var color = PALETTE[0];
+    for (var i = 0; i < PALETTE.length; i++) {
+      if (used.indexOf(PALETTE[i].toLowerCase()) === -1) { color = PALETTE[i]; break; }
+    }
+    state.catDraft.forEach(function (o) { o.open = false; });
+    state.catDraft.push({ id: newCatId(), name: '', color: color, open: true });
+    renderCatDraft();
+    var inputs = el.catList.querySelectorAll('input');
+    try { inputs[inputs.length - 1].focus(); } catch (e) { /* 무시 */ }
+  }
+
+  async function handleCatSave() {
+    if (state.busy) return;
+    var rows = [];
+    for (var i = 0; i < state.catDraft.length; i++) {
+      var c = state.catDraft[i];
+      var name = String(c.name || '').trim();
+      if (!name) {
+        el.catError.textContent = (i + 1) + '번째 카테고리 이름을 적어 주세요.';
+        el.catError.hidden = false;
+        return;
+      }
+      rows.push({ id: c.id, name: name.slice(0, 20), color: c.color });
+    }
+    if (!rows.length) return;
+    state.busy = true;
+    el.catSaveBtn.disabled = true;
+    el.catSaveBtn.textContent = '저장 중…';
+    try {
+      await saveCategories(rows);
+      closeModal(el.catModal);
+      toast('카테고리를 저장했어요');
+    } catch (err) {
+      console.warn('[categories save]', err);
+      el.catError.textContent = err && err.code === 'permission-denied'
+        ? '저장하지 못했어요. Firestore 규칙에서 카테고리 저장을 아직 허용하지 않아요.'
+        : '저장하지 못했어요: ' + errMessage(err);
+      el.catError.hidden = false;
+    } finally {
+      state.busy = false;
+      el.catSaveBtn.disabled = false;
+      el.catSaveBtn.textContent = '저장';
+    }
   }
 
   function openRoomModal() {
@@ -1455,8 +1764,8 @@
       await saveEvent(state.editingId, payload);
       if (author) saveAuthor(author);
       if (state.mode === 'local') refreshLocal();
-      selectDate(payload.date);
       closeModal(el.eventModal);
+      selectDate(payload.date);
       toast(isEdit ? '일정을 수정했어요' : '일정을 추가했어요');
     } catch (err) {
       console.warn('[save]', err);
@@ -1503,12 +1812,12 @@
     var samples = [
       {
         title: '친구랑 저녁 약속', date: base, allDay: false,
-        startTime: '19:00', endTime: '21:00', color: 'meet',
+        startTime: '19:00', endTime: '21:00', color: state.categories[0].id,
         memo: '강남역 2번 출구에서 만나기', author: getSavedAuthor() || '나'
       },
       {
         title: '제주도 여행', date: nextKey, endDate: addDays(nextKey, 2), allDay: true,
-        startTime: null, endTime: null, color: 'trip',
+        startTime: null, endTime: null, color: (state.categories[1] || state.categories[0]).id,
         memo: '숙소 체크인 15:00 · 렌터카 예약', author: '지우'
       }
     ];
@@ -1534,7 +1843,13 @@
     el.todayBtn = document.getElementById('todayBtn');
     el.monthTitle = document.getElementById('monthTitle');
     el.calendarGrid = document.getElementById('calendarGrid');
-    el.dayCard = document.getElementById('dayCard');
+    el.dayModal = document.getElementById('dayModal');
+    el.dayAddBtn = document.getElementById('dayAddBtn');
+    el.catModal = document.getElementById('catModal');
+    el.catList = document.getElementById('catList');
+    el.catAddBtn = document.getElementById('catAddBtn');
+    el.catSaveBtn = document.getElementById('catSaveBtn');
+    el.catError = document.getElementById('catError');
     el.dayTitle = document.getElementById('dayTitle');
     el.dayCount = document.getElementById('dayCount');
     el.eventList = document.getElementById('eventList');
@@ -1581,13 +1896,36 @@
     el.nextBtn.addEventListener('click', function () { shiftMonth(1); });
     el.todayBtn.addEventListener('click', goToday);
     el.addBtn.addEventListener('click', function () { openEventModal(null); });
+    el.dayAddBtn.addEventListener('click', function () { openEventModal(null); });
+    el.catAddBtn.addEventListener('click', addCatDraft);
+    el.catSaveBtn.addEventListener('click', handleCatSave);
+
+    // 달력을 옆으로 밀어 이전/다음 달
+    var touch = null;
+    el.calendarGrid.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { touch = null; return; }
+      touch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: true });
+    el.calendarGrid.addEventListener('touchend', function (e) {
+      if (!touch || !e.changedTouches.length) return;
+      var dx = e.changedTouches[0].clientX - touch.x;
+      var dy = e.changedTouches[0].clientY - touch.y;
+      touch = null;
+      if (Math.abs(dx) > 60 && Math.abs(dy) < 50) shiftMonth(dx < 0 ? 1 : -1);
+    }, { passive: true });
+
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(renderCalendar, 120);
+    });
     el.copyLinkBtn.addEventListener('click', copyShareLink);
     el.roomChip.addEventListener('click', openRoomModal);
 
     el.calendarGrid.addEventListener('click', function (e) {
       var cell = e.target.closest ? e.target.closest('.day-cell') : null;
       if (!cell) return;
-      selectDate(cell.getAttribute('data-date'));
+      openDay(cell.getAttribute('data-date'));
     });
 
     el.eventList.addEventListener('click', function (e) {
@@ -1604,6 +1942,7 @@
     el.colorPicker.addEventListener('click', function (e) {
       var opt = e.target.closest ? e.target.closest('.color-opt') : null;
       if (!opt) return;
+      if (opt.getAttribute('data-edit')) { openCatModal(); return; }
       setColor(opt.getAttribute('data-color'));
     });
 
@@ -1625,12 +1964,12 @@
     });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeAllModals();
+      if (e.key === 'Escape') closeTopModal();
     });
 
     window.addEventListener('storage', function (e) {
       if (state.mode !== 'local') return;
-      if (e.key === localKey(state.roomId)) refreshLocal();
+      if (e.key === localKey(state.roomId) || e.key === localCatKey(state.roomId)) refreshLocal();
     });
 
     window.addEventListener('online', function () {
@@ -1655,7 +1994,6 @@
     syncUrl(state.roomId);
     rememberRoom(state.roomId);
     updateRoomChip();
-    setColor('meet');
     renderAll();
     connectStore();
   }
