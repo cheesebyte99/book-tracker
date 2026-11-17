@@ -97,7 +97,7 @@ firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어
   `calendar/manifest.webmanifest` 에는 일부러 `start_url` 을 두지 않아, 추가할 때 열려 있던 방 주소(`?room=`)로 열립니다.
   「📤 친구 초대」는 휴대폰 공유 창(`navigator.share`)을 쓰고, 안 되는 브라우저에서는 링크를 복사합니다.
   입력칸은 16px 이라 아이폰이 입력할 때 화면을 확대하지 않고, 노치·홈 막대 여백(`safe-area-inset`)을 지킵니다.
-- **일정 글씨 크기**: 위쪽 「가 100%」 버튼에서 달력 칸의 일정 글씨·막대 크기를 10%~100%(10% 단위, 기본 100%)로 고릅니다.
+- **일정 글씨 크기**: 위쪽 「글씨 크기 100%」 버튼에서 달력 칸의 일정 글씨·막대 크기를 10%~100%(10% 단위, 기본 100%)로 고릅니다.
   작게 할수록 한 칸에 일정이 더 들어가며, 이 기기의 localStorage(`shared-calendar:chip-scale`)에만 저장됩니다.
 - **카테고리 편집**: 일정 창의 「✏️ 편집」에서 카테고리 이름·색을 바꾸고, 추가·삭제합니다.
   방마다 `rooms/{방ID}/categories/{id}` (`name`·`color`(#rrggbb)·`order`)에 저장되어 친구와 함께 씁니다.
