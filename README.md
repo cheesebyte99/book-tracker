@@ -90,6 +90,11 @@ firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어
 - 앱: https://cheesebyte99.github.io/book-tracker/calendar/
 - 원본: `shared-calendar/index.html` (Firebase `jaeyeon-life` 프로젝트, `rooms/{방ID}/events`)
 - 방 링크: `https://cheesebyte99.github.io/book-tracker/calendar/?room=<방ID>`
+- **한 화면 달력**: 달력이 화면을 꽉 채우고, 칸마다 일정 제목이 색 칩으로 보입니다(기간 일정은 날짜를 가로지르는 바).
+  날짜를 누르면 그 날 일정을 자세히 보는 창이 열리고, 옆으로 밀면 이전/다음 달로 넘어갑니다.
+- **카테고리 편집**: 일정 창의 「✏️ 편집」에서 카테고리 이름·색을 바꾸고, 추가·삭제합니다.
+  방마다 `rooms/{방ID}/categories/{id}` (`name`·`color`(#rrggbb)·`order`)에 저장되어 친구와 함께 씁니다.
+  저장된 카테고리가 없으면 기본 4개(약속·여행·기념일·기타)를 씁니다. 지운 카테고리의 일정은 「미분류」(회색)로 보입니다.
 - **기간 일정**: 일정 추가에서 「기간 일정 (여러 날)」을 켜면 시작~종료 날짜를 고르고, 달력에 날짜를 가로지르는 바로 표시됩니다.
   문서에 `endDate`(마지막 날, `YYYY-MM-DD`)가 더해지며 하루 일정 문서는 예전과 같습니다.
   Firestore 규칙이 `rooms/{방ID}/events` 문서에 `endDate` 를 허용해야 저장됩니다 — `firebase/firestore.rules` 를 콘솔에 붙여 넣고 게시.
