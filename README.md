@@ -92,7 +92,7 @@ firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어
 - 방 링크: `https://cheesebyte99.github.io/book-tracker/calendar/?room=<방ID>`
 - **기간 일정**: 일정 추가에서 「기간 일정 (여러 날)」을 켜면 시작~종료 날짜를 고르고, 달력에 날짜를 가로지르는 바로 표시됩니다.
   문서에 `endDate`(마지막 날, `YYYY-MM-DD`)가 더해지며 하루 일정 문서는 예전과 같습니다.
-  Firestore 규칙이 `rooms/{방ID}/events` 문서에 `endDate` 를 허용해야 저장됩니다.
+  Firestore 규칙이 `rooms/{방ID}/events` 문서에 `endDate` 를 허용해야 저장됩니다 — `firebase/firestore.rules` 를 콘솔에 붙여 넣고 게시.
 
 ### 📱 안드로이드 앱 (APK) — `android/`
 
