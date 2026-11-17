@@ -46,6 +46,7 @@
 | `apple-touch-icon.png` | iOS 홈 화면 아이콘 |
 | `.nojekyll` | GitHub Pages 가 Jekyll 처리 없이 그대로 서빙하도록 |
 | `calendar/index.html` | 우리들의 캘린더 앱 본체 (같은 저장소의 하위 경로로 배포) |
+| `android/` | 우리들의 캘린더 안드로이드 앱(APK) 프로젝트 |
 
 ## 앱 기능
 
@@ -89,6 +90,32 @@ firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어
 - 앱: https://cheesebyte99.github.io/book-tracker/calendar/
 - 원본: `shared-calendar/index.html` (Firebase `jaeyeon-life` 프로젝트, `rooms/{방ID}/events`)
 - 방 링크: `https://cheesebyte99.github.io/book-tracker/calendar/?room=<방ID>`
+
+### 📱 안드로이드 앱 (APK) — `android/`
+
+같은 캘린더를 설치형 안드로이드 앱으로 감싼 것입니다. `calendar/index.html` 을 빌드 때 그대로 앱 안에 넣으므로
+웹판을 고치면 앱도 다음 빌드에 같이 바뀝니다. 일정은 웹판과 똑같이 Firestore `rooms/{방ID}/events` 로 실시간 공유됩니다
+(앱 ↔ 앱, 앱 ↔ 브라우저 모두 같은 방이면 함께 보임).
+
+- 앱은 페이지를 `https://cheesebyte99.github.io/book-tracker/calendar/` 주소로 열되, 파일은 앱 안의 것을 씁니다
+  (`WebViewAssetLoader`). 그래서 인터넷이 잠깐 끊겨도 화면은 바로 뜨고, 초대 링크는 웹 주소 그대로라 앱이 없는 친구도 브라우저로 들어옵니다.
+- 앱에서만: **📤 친구 초대** 버튼이 카카오톡 등으로 보내는 안드로이드 공유 창을 엽니다 · 방 설정에 초대 링크를 통째로 붙여 넣어도 방 ID 만 골라 이동 ·
+  다른 앱에서 초대 글을 **공유 → 우리들의 캘린더** 로 보내면 그 방이 열림 · 뒤로 가기는 열린 창부터 닫음.
+- 초대 링크를 눌러 앱이 바로 열리게 하려면: 앱 정보 → **기본으로 열기** → `cheesebyte99.github.io` 링크 허용
+  (안드로이드 12+ 는 도메인 인증 파일이 없으면 기본으로 꺼져 있음).
+
+빌드:
+
+```bash
+cd android
+./gradlew assembleRelease     # → app/build/outputs/apk/release/app-release.apk  (ANDROID_HOME 필요)
+```
+
+GitHub Actions(`.github/workflows/android-apk.yml`)가 `android/`·`calendar/` 변경 때마다 APK 를 만들어
+실행 결과의 **Artifacts** 에 올리고, `main` 브랜치면 **Releases** 에 `our-calendar.apk` 로 올립니다.
+
+서명: 저장소 비밀값 `ANDROID_KEYSTORE_BASE64`·`ANDROID_KEYSTORE_PASSWORD`·`ANDROID_KEY_ALIAS`·`ANDROID_KEY_PASSWORD` 가 있으면 그 키,
+없으면 `android/debug.keystore`(비밀번호 `android`) 로 서명합니다. 같은 키로 서명돼야 덮어쓰기 업데이트가 되므로 키를 바꾸면 한 번 지우고 다시 설치해야 합니다.
 
 ## 갱신 방법
 
