@@ -172,8 +172,8 @@
   /* 일정 칩/바: 같은 주(줄)에서 시작~끝 칸을 가로질러 그린다 (하루 일정은 한 칸) */
   .chip {
     align-self: start; z-index: 2; pointer-events: none; min-width: 0;
-    height: 15px; margin: 0 2px; padding: 0 4px; border-radius: 4px;
-    color: #fff; font-size: 10.5px; font-weight: 700; line-height: 15px; letter-spacing: -.3px;
+    height: var(--chip-h, 15px); margin: 0 2px; padding: 0 var(--chip-pad, 4px); border-radius: 4px;
+    color: #fff; font-size: var(--chip-fs, 10.5px); font-weight: 700; line-height: var(--chip-h, 15px); letter-spacing: -.3px;
     white-space: nowrap; overflow: hidden; text-overflow: clip; text-align: center;
   }
   .chip.multi { text-align: center; }
@@ -262,6 +262,27 @@
     border-radius: 12px; padding: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer;
   }
   .color-opt.edit { border-style: dashed; color: var(--muted); }
+
+  /* ── 일정 글씨 크기 ── */
+  .subbar .spacer { flex: 1; }
+  .text-size-btn {
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--muted);
+    border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 800; cursor: pointer; white-space: nowrap;
+  }
+  .scale-value { text-align: center; font-size: 30px; font-weight: 800; letter-spacing: -.5px; margin: 2px 0 10px; }
+  .scale-row { display: flex; align-items: center; gap: 10px; }
+  .scale-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--primary); height: 32px; }
+  .scale-step {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+    background: var(--surface-2); color: var(--text); font-size: 22px; font-weight: 700; cursor: pointer;
+  }
+  .scale-step:disabled { opacity: .35; }
+  .scale-ticks { display: flex; justify-content: space-between; padding: 0 54px; margin-top: 2px; font-size: 10.5px; color: var(--muted); font-weight: 700; }
+  .scale-preview {
+    margin: 16px 0 4px; padding: 10px 6px; border-radius: 14px; background: var(--surface-2);
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px 0; align-items: start;
+  }
+  .scale-preview .chip { margin: 0 2px; }
 
   /* ── 모달 ── */
   .modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; }
@@ -375,6 +396,8 @@
   <div class="subbar">
     <button id="roomChip" class="room-chip" type="button" title="공유 방 바꾸기">방: 불러오는 중</button>
     <span id="syncChip" class="sync-chip">연결 중</span>
+    <span class="spacer"></span>
+    <button id="textSizeBtn" class="text-size-btn" type="button" aria-label="일정 글씨 크기">가 100%</button>
   </div>
 
   <div id="modeBanner" class="banner" hidden></div>
@@ -472,6 +495,32 @@
   </div>
 </div>
 
+<!-- 일정 글씨 크기 모달 -->
+<div id="textModal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="textModalTitle">
+    <div class="sheet-head">
+      <h3 id="textModalTitle">일정 글씨 크기</h3>
+      <button class="icon-btn" type="button" data-close="1" aria-label="닫기">✕</button>
+    </div>
+    <p class="hint">달력 칸에 보이는 일정 글씨와 막대 크기예요. 작게 할수록 한 칸에 일정이 더 많이 들어가요.</p>
+    <div id="scaleValue" class="scale-value">100%</div>
+    <div class="scale-row">
+      <button id="scaleDown" class="scale-step" type="button" aria-label="10% 작게">−</button>
+      <input id="scaleRange" type="range" min="10" max="100" step="10" value="100" aria-label="일정 글씨 크기 (퍼센트)">
+      <button id="scaleUp" class="scale-step" type="button" aria-label="10% 크게">＋</button>
+    </div>
+    <div class="scale-ticks" aria-hidden="true"><span>10%</span><span>100%</span></div>
+    <div id="scalePreview" class="scale-preview" aria-hidden="true"></div>
+    <div class="sheet-actions">
+      <button id="scaleResetBtn" class="btn-ghost" type="button">기본(100%)으로</button>
+      <div class="spacer"></div>
+      <button class="btn-primary" type="button" data-close="1">완료</button>
+    </div>
+    <p class="hint small">이 설정은 이 기기에만 저장돼요. 친구 화면에는 영향을 주지 않아요.</p>
+  </div>
+</div>
+
 <!-- 카테고리 편집 모달 -->
 <div id="catModal" class="modal" hidden>
   <div class="modal-backdrop" data-close="1"></div>
@@ -547,6 +596,7 @@
   var FIREBASE_VERSION = '10.14.1';
   var STORE_PREFIX = 'shared-calendar:v1:';
   var AUTHOR_KEY = 'shared-calendar:author';
+  var CHIP_SCALE_KEY = 'shared-calendar:chip-scale';
   var LAST_ROOM_KEY = 'shared-calendar:last-room';
 
   var DEFAULT_CATEGORIES = [
@@ -1142,8 +1192,69 @@
   }
 
   var NUM_H = 26;   // 날짜 숫자 영역
-  var LANE_H = 17;  // 칩 한 줄(15px) + 간격
   var MORE_H = 13;  // 「+n」 자리
+  var CHIP_FS = 10.5; // 100% 일 때 일정 글씨(px)
+  var CHIP_H = 15;    // 100% 일 때 막대 높이(px)
+  var chipScale = 100; // 10~100 (%)
+  var LANE_H = CHIP_H + 2; // 칩 한 줄 + 간격 — 글씨 크기 설정에 따라 바뀐다
+
+  function readChipScale() {
+    var v = 100;
+    try { v = parseInt(window.localStorage.getItem(CHIP_SCALE_KEY) || '100', 10); } catch (e) { v = 100; }
+    return clampScale(v);
+  }
+
+  function clampScale(v) {
+    v = Math.round((parseInt(v, 10) || 100) / 10) * 10;
+    return Math.min(100, Math.max(10, v));
+  }
+
+  /* 일정 글씨 크기(%)를 칩 글씨·막대 높이·줄 간격에 적용한다 */
+  function applyChipScale(v, save) {
+    chipScale = clampScale(v);
+    var k = chipScale / 100;
+    var h = Math.max(3, Math.round(CHIP_H * k));
+    var root = document.documentElement.style;
+    root.setProperty('--chip-fs', (CHIP_FS * k).toFixed(2) + 'px');
+    root.setProperty('--chip-h', h + 'px');
+    root.setProperty('--chip-pad', Math.max(1, Math.round(4 * k)) + 'px');
+    LANE_H = h + (k < 0.5 ? 1 : 2);
+    if (save) {
+      try { window.localStorage.setItem(CHIP_SCALE_KEY, String(chipScale)); } catch (e) { /* 무시 */ }
+    }
+    if (el.textSizeBtn) el.textSizeBtn.textContent = '가 ' + chipScale + '%';
+    if (el.scaleValue) {
+      el.scaleValue.textContent = chipScale + '%';
+      el.scaleRange.value = String(chipScale);
+      el.scaleDown.disabled = chipScale <= 10;
+      el.scaleUp.disabled = chipScale >= 100;
+    }
+    if (state.viewYear) renderCalendar(); // 시작할 때는 달이 정해진 뒤 그린다
+  }
+
+  function renderScalePreview() {
+    var box = el.scalePreview;
+    box.innerHTML = '';
+    var samples = [
+      { t: '재연휴가', c: 1, span: 3 }, { t: '필테 12:00', c: 2, span: 1 },
+      { t: '회진 휴가', c: 2, span: 1 }, { t: '데블스플랜3 오픈', c: 1, span: 2 }, { t: '수능', c: 0, span: 1 }
+    ];
+    samples.forEach(function (sm) {
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.style.gridColumn = 'span ' + sm.span;
+      var cat = state.categories[sm.c] || state.categories[0] || UNCATEGORIZED;
+      chip.style.background = cat.color;
+      chip.textContent = sm.t;
+      box.appendChild(chip);
+    });
+  }
+
+  function openTextModal() {
+    renderScalePreview();
+    applyChipScale(chipScale, false);
+    openModal(el.textModal);
+  }
 
   function laneOrder(a, b) {
     if (a.col !== b.col) return a.col - b.col;
@@ -1875,6 +1986,14 @@
     el.monthTitle = document.getElementById('monthTitle');
     el.calendarGrid = document.getElementById('calendarGrid');
     el.dayModal = document.getElementById('dayModal');
+    el.textSizeBtn = document.getElementById('textSizeBtn');
+    el.textModal = document.getElementById('textModal');
+    el.scaleValue = document.getElementById('scaleValue');
+    el.scaleRange = document.getElementById('scaleRange');
+    el.scaleDown = document.getElementById('scaleDown');
+    el.scaleUp = document.getElementById('scaleUp');
+    el.scalePreview = document.getElementById('scalePreview');
+    el.scaleResetBtn = document.getElementById('scaleResetBtn');
     el.dayAddBtn = document.getElementById('dayAddBtn');
     el.catModal = document.getElementById('catModal');
     el.catList = document.getElementById('catList');
@@ -1929,6 +2048,11 @@
     el.addBtn.addEventListener('click', function () { openEventModal(null); });
     el.dayAddBtn.addEventListener('click', function () { openEventModal(null); });
     el.catAddBtn.addEventListener('click', addCatDraft);
+    el.textSizeBtn.addEventListener('click', openTextModal);
+    el.scaleRange.addEventListener('input', function () { applyChipScale(el.scaleRange.value, true); });
+    el.scaleDown.addEventListener('click', function () { applyChipScale(chipScale - 10, true); });
+    el.scaleUp.addEventListener('click', function () { applyChipScale(chipScale + 10, true); });
+    el.scaleResetBtn.addEventListener('click', function () { applyChipScale(100, true); });
     el.catSaveBtn.addEventListener('click', handleCatSave);
 
     // 달력을 옆으로 밀어 이전/다음 달
@@ -2014,6 +2138,7 @@
 
   function init() {
     cacheDom();
+    applyChipScale(readChipScale(), false);
     if (canNativeShare()) el.copyLinkBtn.textContent = '📤 친구 초대';
     buildColorPicker();
     bindEvents();
