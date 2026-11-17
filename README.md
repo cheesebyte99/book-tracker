@@ -46,6 +46,7 @@
 | `apple-touch-icon.png` | iOS 홈 화면 아이콘 |
 | `.nojekyll` | GitHub Pages 가 Jekyll 처리 없이 그대로 서빙하도록 |
 | `calendar/index.html` | 우리들의 캘린더 앱 본체 (같은 저장소의 하위 경로로 배포) |
+| `calendar/manifest.webmanifest`, `calendar/icon*.png`, `calendar/icon.svg`, `calendar/apple-touch-icon.png` | 캘린더 홈 화면 아이콘·앱 정보 |
 | `android/` | 우리들의 캘린더 안드로이드 앱(APK) 프로젝트 |
 
 ## 앱 기능
@@ -92,6 +93,10 @@ firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어
 - 방 링크: `https://cheesebyte99.github.io/book-tracker/calendar/?room=<방ID>`
 - **한 화면 달력**: 달력이 화면을 꽉 채우고, 칸마다 일정 제목이 색 칩으로 보입니다(기간 일정은 날짜를 가로지르는 바).
   날짜를 누르면 그 날 일정을 자세히 보는 창이 열리고, 옆으로 밀면 이전/다음 달로 넘어갑니다.
+- **아이폰**: Safari 로 열고 공유(□↑) → **홈 화면에 추가** 하면 캘린더 아이콘(`calendar/apple-touch-icon.png`)으로 앱처럼 열립니다.
+  `calendar/manifest.webmanifest` 에는 일부러 `start_url` 을 두지 않아, 추가할 때 열려 있던 방 주소(`?room=`)로 열립니다.
+  「📤 친구 초대」는 휴대폰 공유 창(`navigator.share`)을 쓰고, 안 되는 브라우저에서는 링크를 복사합니다.
+  입력칸은 16px 이라 아이폰이 입력할 때 화면을 확대하지 않고, 노치·홈 막대 여백(`safe-area-inset`)을 지킵니다.
 - **카테고리 편집**: 일정 창의 「✏️ 편집」에서 카테고리 이름·색을 바꾸고, 추가·삭제합니다.
   방마다 `rooms/{방ID}/categories/{id}` (`name`·`color`(#rrggbb)·`order`)에 저장되어 친구와 함께 씁니다.
   저장된 카테고리가 없으면 기본 4개(약속·여행·기념일·기타)를 씁니다. 지운 카테고리의 일정은 「미분류」(회색)로 보입니다.

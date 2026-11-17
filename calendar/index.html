@@ -6,11 +6,18 @@
 <meta name="theme-color" content="#4f46e5">
 <meta name="description" content="친구와 실시간으로 함께 쓰는 공유 캘린더">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="우리들의 캘린더">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="우리 캘린더">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
 <title>우리들의 캘린더</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   :root {
+    color-scheme: light dark; /* 날짜·시간 칸 같은 기본 입력 도구도 다크 모드를 따른다 */
     --bg: #f5f6fb;
     --bg-2: #eceef8;
     --surface: #ffffff;
@@ -62,9 +69,8 @@
   body::before {
     content: "";
     position: fixed;
-    inset: 0 0 auto 0;
-    height: 260px;
-    background: linear-gradient(160deg, rgba(79, 70, 229, .16), rgba(79, 70, 229, 0));
+    inset: 0;
+    background: linear-gradient(180deg, rgba(79, 70, 229, .16), rgba(79, 70, 229, 0) 240px);
     pointer-events: none;
     z-index: 0;
   }
@@ -72,8 +78,12 @@
   .app {
     position: relative; z-index: 1; max-width: 720px; margin: 0 auto;
     height: 100vh; height: 100dvh; display: flex; flex-direction: column;
-    padding: 8px 6px env(safe-area-inset-bottom);
+    padding: max(8px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
+      env(safe-area-inset-bottom) max(6px, env(safe-area-inset-left));
   }
+  html { overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  button { touch-action: manipulation; }
+  .sheet { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
   button { font-family: inherit; }
 
   /* ── 상단 바 ── */
@@ -215,7 +225,8 @@
   /* ── 추가 버튼 (오른쪽 아래 동그라미) ── */
   .fab {
     position: fixed; z-index: 20; cursor: pointer;
-    right: max(16px, calc(50% - 344px)); bottom: calc(18px + env(safe-area-inset-bottom));
+    right: max(16px, calc(50% - 344px), calc(10px + env(safe-area-inset-right)));
+    bottom: calc(18px + env(safe-area-inset-bottom));
     width: 58px; height: 58px; border-radius: 50%; border: 0;
     font-size: 30px; font-weight: 400; line-height: 1; color: #fff; padding: 0 0 3px;
     background: linear-gradient(135deg, #6366f1, #4338ca);
@@ -233,7 +244,7 @@
   }
   .cat-main input {
     flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text);
-    border-radius: 10px; padding: 9px 10px; font-size: 14.5px; font-family: inherit;
+    border-radius: 10px; padding: 9px 10px; font-size: 16px; font-family: inherit;
   }
   .cat-del {
     flex: 0 0 auto; border: 0; background: var(--danger-soft); color: var(--danger);
@@ -282,10 +293,14 @@
   .field input[type="text"], .field input[type="date"], .field input[type="time"],
   .field textarea, .copy-row input {
     width: 100%; border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
-    border-radius: 12px; padding: 11px 12px; font-size: 15px; font-family: inherit; line-height: 1.3;
+    border-radius: 12px; padding: 11px 12px; font-size: 16px; font-family: inherit; line-height: 1.3;
+    min-height: 44px;
     -webkit-appearance: none; appearance: none;
   }
   .field textarea { resize: vertical; min-height: 72px; }
+  /* 아이폰 날짜·시간 칸: 값이 가운데로 몰리거나 빈 칸이 납작해지지 않게 */
+  .field input[type="date"], .field input[type="time"] { display: block; text-align: left; }
+  .field input::-webkit-date-and-time-value { text-align: left; min-height: 1.3em; }
   .field input:focus, .field textarea:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
   .field input:disabled { opacity: .45; }
   .field input::placeholder, .field textarea::placeholder { color: var(--faint); }
@@ -1707,8 +1722,24 @@
     }
   }
 
-  function copyShareLink() {
+  function canNativeShare() {
+    return typeof navigator.share === 'function';
+  }
+
+  async function copyShareLink() {
     var url = buildShareUrl();
+    if (canNativeShare()) {
+      try {
+        await navigator.share({
+          title: '우리들의 캘린더',
+          text: '📅 우리들의 캘린더에 초대할게요! (방: ' + state.roomId + ')',
+          url: url
+        });
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return; // 사용자가 공유 창을 닫음
+      }
+    }
     copyText(url, '공유 링크를 복사했어요 · 친구에게 보내 보세요');
   }
 
@@ -1983,6 +2014,7 @@
 
   function init() {
     cacheDom();
+    if (canNativeShare()) el.copyLinkBtn.textContent = '📤 친구 초대';
     buildColorPicker();
     bindEvents();
 
