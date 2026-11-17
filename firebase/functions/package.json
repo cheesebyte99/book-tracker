@@ -1,0 +1,14 @@
+{
+  "name": "our-calendar-functions",
+  "private": true,
+  "description": "우리들의 캘린더 — 일정 변경 알림·미리 알림 푸시",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0"
+  }
+}

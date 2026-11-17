@@ -48,6 +48,8 @@
 | `calendar/index.html` | 우리들의 캘린더 앱 본체 (같은 저장소의 하위 경로로 배포) |
 | `calendar/manifest.webmanifest`, `calendar/icon*.png`, `calendar/icon.svg`, `calendar/apple-touch-icon.png` | 캘린더 홈 화면 아이콘·앱 정보 |
 | `android/` | 우리들의 캘린더 안드로이드 앱(APK) 프로젝트 |
+| `firebase/functions/`, `firebase.json`, `.firebaserc` | 푸시 알림 서버(Cloud Functions)와 Firebase CLI 배포 설정 |
+| `firebase/firestore.rules` | Firestore 보안 규칙 (CLI 로 배포) |
 
 ## 앱 기능
 
@@ -131,6 +133,29 @@ GitHub Actions(`.github/workflows/android-apk.yml`)가 `android/`·`calendar/` �
 
 서명: 저장소 비밀값 `ANDROID_KEYSTORE_BASE64`·`ANDROID_KEYSTORE_PASSWORD`·`ANDROID_KEY_ALIAS`·`ANDROID_KEY_PASSWORD` 가 있으면 그 키,
 없으면 `android/debug.keystore`(비밀번호 `android`) 로 서명합니다. 같은 키로 서명돼야 덮어쓰기 업데이트가 되므로 키를 바꾸면 한 번 지우고 다시 설치해야 합니다.
+
+### 🔔 푸시 알림 (Cloud Functions + FCM)
+
+- **설정(⚙️)**: 알림 받기 · 당일 알림 시간(5분 단위, 기본 09:00) · 일정 추가·수정·삭제 알림 · 내 이름 · 글씨 크기.
+  알림 설정은 기기마다 따로이고(localStorage `shared-calendar:push`), 켜면 `rooms/{방ID}/devices/{기기ID}` 에
+  FCM 토큰·당일 알림 시간·시간대를 등록합니다(앱은 쓰기·지우기만, 읽기는 서버만). 방을 바꾸면 예전 방 등록은 지웁니다.
+- **일정마다 알림**: 당일 · 1일 전 · 2일 전 · 3일 전 · 1주 전 중 여러 개(`reminders: [0,1,2]`). 새 일정과 예전 일정의 기본값은 당일·1일 전·2일 전.
+- **서버** (`firebase/functions`, 서울 asia-northeast3, Node 22, 2세대):
+  - `eventChanged` — 일정 추가·수정·삭제 시 같은 방의 다른 기기에 「○○님이 「제목」 일정을 추가했어요」.
+    저장·삭제 때 앱이 `editedBy`(기기)·`editor`(이름)를 적어 두어, 바꾼 사람 본인에게는 보내지 않습니다.
+  - `dailyReminders` — 5분마다, 각 기기의 당일 알림 시간이 된 기기에 「⏰ 오늘/내일/모레 일정」을 하루 한 번(`lastRemind`).
+  - 받을 수 없는 토큰(앱 삭제 등)은 기기 문서를 지워 정리합니다. 판단 로직은 `logic.js`, 시험은 `npm test`.
+- **받는 쪽**: 안드로이드 앱은 네이티브 FCM(`android/app/google-services.json`), 웹·아이폰 홈 화면 앱은
+  `calendar/firebase-messaging-sw.js` + VAPID 키. 알림을 누르면 그 방·날짜 상세가 열립니다(`?room=…&date=…`).
+- 배포 (프로젝트 소유자 계정으로 로그인한 뒤):
+
+```bash
+cd firebase/functions && npm install && npm test && cd ../..
+firebase deploy --only firestore:rules,functions   # firebase.json · .firebaserc 기준
+```
+
+> 이제 규칙은 콘솔 편집기 대신 CLI 로 배포하므로 한 줄 길이 제한을 신경 쓰지 않아도 됩니다.
+> 처음 2세대 함수를 배포할 때는 Eventarc 권한이 퍼지는 데 몇 분 걸려 한 번 실패할 수 있습니다(몇 분 뒤 다시 배포).
 
 ## 갱신 방법
 

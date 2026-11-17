@@ -1,5 +1,6 @@
 package io.github.cheesebyte99.calendar;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
@@ -8,6 +9,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -46,6 +48,7 @@ public class MainActivity extends Activity {
     static final String BASE_PATH = "/book-tracker/calendar/";
     static final String BASE_URL = "https://" + HOST + BASE_PATH;
 
+    private static final int REQ_NOTIFICATIONS = 7;
     private static final Pattern ROOM_IN_TEXT = Pattern.compile("[?&]room=([A-Za-z0-9-]{1,32})");
 
     private WebView webView;
@@ -84,6 +87,10 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient()); // confirm()/prompt() 대화상자
         webView.setWebViewClient(new CalendarClient());
 
+        Push.createChannel(this);
+        Push.listener = token -> runOnUiThread(() -> sendTokenToPage(token));
+        Push.refreshToken(this);
+
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         }
@@ -98,8 +105,27 @@ public class MainActivity extends Activity {
         setIntent(intent);
         String room = roomFromIntent(intent);
         if (room != null) {
-            webView.loadUrl(BASE_URL + "?room=" + room);
+            webView.loadUrl(urlFor(room, dateFromIntent(intent)));
         }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_NOTIFICATIONS) return;
+        boolean granted = Push.hasPermission(this);
+        webView.evaluateJavascript("window.__onPushPermission && window.__onPushPermission('"
+                + (granted ? "granted" : "denied") + "')", null);
+        if (granted) {
+            String t = Push.savedToken(this);
+            if (!t.isEmpty()) sendTokenToPage(t); else Push.refreshToken(this);
+        }
+    }
+
+    private void sendTokenToPage(String token) {
+        if (webView == null || token == null || token.isEmpty() || !Push.hasPermission(this)) return;
+        webView.evaluateJavascript("window.__onPushToken && window.__onPushToken('"
+                + token.replace("\\", "").replace("'", "") + "')", null);
     }
 
     @Override
@@ -122,6 +148,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (Push.listener != null) Push.listener = null;
         webView.destroy();
         super.onDestroy();
     }
@@ -155,12 +182,28 @@ public class MainActivity extends Activity {
 
     private String urlForIntent(Intent intent) {
         String room = roomFromIntent(intent);
-        return room != null ? BASE_URL + "?room=" + room : BASE_URL;
+        return room != null ? urlFor(room, dateFromIntent(intent)) : BASE_URL;
+    }
+
+    private static String urlFor(String room, String date) {
+        String url = BASE_URL + "?room=" + room;
+        if (date != null && date.matches("\\d{4}-\\d{2}-\\d{2}")) url += "&date=" + date;
+        return url;
+    }
+
+    /** 알림에 실려 온 날짜(그 날 상세 창을 연다) */
+    static String dateFromIntent(Intent intent) {
+        if (intent == null) return null;
+        String d = intent.getStringExtra("date");
+        if (d == null && intent.getData() != null) d = intent.getData().getQueryParameter("date");
+        return d;
     }
 
     /** 초대 링크(VIEW) 또는 공유받은 글(SEND)에서 방 ID 를 꺼낸다. */
     static String roomFromIntent(Intent intent) {
         if (intent == null) return null;
+        String fromPush = intent.getStringExtra("room"); // 알림을 눌러 연 경우
+        if (fromPush != null && fromPush.matches("[a-z0-9-]{1,32}")) return fromPush;
         String text = null;
         if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             text = intent.getData().toString();
@@ -254,6 +297,42 @@ public class MainActivity extends Activity {
 
     /** 페이지에서 window.AndroidApp 으로 부르는 기능. */
     private final class Bridge {
+        /** 이 기기의 FCM 토큰(아직 없거나 알림을 못 쓰면 빈 문자열) */
+        @JavascriptInterface
+        public String getPushToken() {
+            if (!Push.enabled()) return "";
+            String t = Push.savedToken(MainActivity.this);
+            if (t.isEmpty()) Push.refreshToken(MainActivity.this);
+            return t;
+        }
+
+        /** 'granted' | 'default' | 'unavailable' */
+        @JavascriptInterface
+        public String pushPermission() {
+            if (!Push.enabled()) return "unavailable";
+            return Push.hasPermission(MainActivity.this) ? "granted" : "default";
+        }
+
+        @JavascriptInterface
+        public void requestPushPermission() {
+            runOnUiThread(() -> {
+                if (Push.hasPermission(MainActivity.this)) {
+                    onRequestPermissionsResult(REQ_NOTIFICATIONS, new String[0], new int[0]);
+                } else if (Build.VERSION.SDK_INT >= 33) {
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+                } else {
+                    // Android 12 이하: 앱 알림이 꺼져 있으면 설정 화면으로
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                    } catch (ActivityNotFoundException ignored) {
+                        // 무시
+                    }
+                    onRequestPermissionsResult(REQ_NOTIFICATIONS, new String[0], new int[0]);
+                }
+            });
+        }
+
         @JavascriptInterface
         public void share(String text) {
             runOnUiThread(() -> {
