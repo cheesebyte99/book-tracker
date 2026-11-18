@@ -3,7 +3,7 @@
  * 우리 사진첩 알림 판단 로직 (Firebase 와 상관없는 순수 함수 — test/ 에서 시험한다)
  *
  * 앨범 문서  albums/{방}
- *   name, cloudinary?, since?(우리가 시작한 날 YYYY-MM-DD — 이날이 1일째)
+ *   name, cloudinary?, since?(연인이 된 날 YYYY-MM-DD — 이날이 1일째), wedding?(결혼기념일 YYYY-MM-DD)
  * 추억 문서  albums/{방}/days/{id}
  *   date(YYYY-MM-DD), title, place?, memo?, author,
  *   editedBy?(마지막으로 저장한 기기 id), editor?(그 사람 이름), photoCount?(그 추억의 사진 수)
@@ -96,35 +96,56 @@ function isLeap(y) {
   return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 }
 
-/** 그날이 기념일이면 이름들(예 ['100일'], ['1주년']), 아니면 빈 배열 */
+/** start 로부터 date 가 몇 주년인지(아니면 0). 윤일에 시작했으면 평년엔 2월 28일 */
+function yearsOn(start, date) {
+  const years = +date.slice(0, 4) - +start.slice(0, 4);
+  let md = start.slice(5);
+  if (md === '02-29' && !isLeap(+date.slice(0, 4))) md = '02-28';
+  return years > 0 && date.slice(5) === md ? years : 0;
+}
+
+/** 연인이 된 날 기준 — 그날이 기념일이면 이름들(예 ['100일'], ['1주년']), 아니면 빈 배열 */
 function milestonesOn(since, date) {
   if (!isDateKey(since) || !isDateKey(date) || date <= since) return [];
   const out = [];
   const n = dayNumber(since, date);
   if (n % 100 === 0) out.push(n + '일');
-  const years = +date.slice(0, 4) - +since.slice(0, 4);
-  let md = since.slice(5);
-  if (md === '02-29' && !isLeap(+date.slice(0, 4))) md = '02-28'; // 윤일에 시작했으면 평년엔 2월 28일
-  if (years > 0 && date.slice(5) === md) out.push(years + '주년');
+  const y = yearsOn(since, date);
+  if (y) out.push(y + '주년');
   return out;
+}
+
+/** 결혼기념일 기준 — ['결혼식'] 또는 ['결혼 2주년'] */
+function weddingMilestonesOn(wedding, date) {
+  if (!isDateKey(wedding) || !isDateKey(date) || date < wedding) return [];
+  if (date === wedding) return ['결혼식'];
+  const y = yearsOn(wedding, date);
+  return y ? ['결혼 ' + y + '주년'] : [];
 }
 
 /**
  * 오늘(localDate) 보낼 기념일 알림들 — 당일·하루 전·일주일 전.
+ * dates: { since, wedding } (예전처럼 since 문자열만 줘도 된다)
  * @returns [{days, title, body, date}]
  */
-function buildAnniversaryNotes(since, localDate) {
+function buildAnniversaryNotes(dates, localDate) {
+  const { since, wedding } = typeof dates === 'string' ? { since: dates } : (dates || {});
   const out = [];
   for (const d of ANNIV_LEAD_DAYS) {
     const date = addDays(localDate, d);
-    const names = milestonesOn(since, date);
+    const love = milestonesOn(since, date);
+    const wed = weddingMilestonesOn(wedding, date);
+    const names = love.concat(wed);
     if (!names.length) continue;
     const what = '우리 ' + names.join(' · ');
     let title;
     let body;
     if (d === 0) {
       title = '💝 오늘은 ' + what + '이에요';
-      body = shortDate(since) + '부터 함께한 지 ' + dayNumber(since, date) + '일째, 축하해요!';
+      const parts = [];
+      if (love.length) parts.push(shortDate(since) + '부터 함께한 지 ' + dayNumber(since, date) + '일째');
+      if (wed.length) parts.push(date === wedding ? '드디어 결혼식 날' : '결혼한 지 ' + dayNumber(wedding, date) + '일째');
+      body = parts.join(' · ') + ', 축하해요!';
     } else {
       const when = d === 1 ? '내일은' : d === 7 ? '일주일 뒤는' : d + '일 뒤는';
       title = '💝 ' + when + ' ' + what;
@@ -138,5 +159,5 @@ function buildAnniversaryNotes(since, localDate) {
 module.exports = {
   ANNIV_LEAD_DAYS,
   describeDayChange, wantsDayAlert, wantsAnnivAlert,
-  dayNumber, milestonesOn, buildAnniversaryNotes
+  dayNumber, milestonesOn, weddingMilestonesOn, buildAnniversaryNotes
 };

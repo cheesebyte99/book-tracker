@@ -487,6 +487,37 @@
     color: var(--ink-2);
   }
   .anniv-list .dd { font-weight: 800; color: var(--rose); white-space: nowrap; }
+  .anniv-list li.wedding .dd { color: var(--gold); }
+  .mini-sub { margin-left: 4px; font-weight: 600; color: var(--ink-3); }
+
+  .anniv-card {
+    margin: 4px 0 12px;
+    padding: 16px 16px 6px;
+    border-radius: var(--radius);
+    background: linear-gradient(135deg, #FFF1E6 0%, #FBE3E1 100%);
+    border: 1px solid rgba(180, 99, 111, .18);
+    box-shadow: var(--shadow);
+  }
+  .anniv-card.empty { padding: 0; background: none; border: none; box-shadow: none; }
+  .anniv-top { display: flex; gap: 10px; }
+  .anniv-stat { flex: 1 1 0; min-width: 0; }
+  .anniv-stat .l { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+  .anniv-stat .v { display: block; margin-top: 2px; font-size: 26px; font-weight: 900; color: var(--rose); letter-spacing: -.5px; line-height: 1.2; }
+  .anniv-card .anniv-list { margin-top: 10px; }
+  .anniv-card .anniv-list li { border-top-color: rgba(180, 99, 111, .22); font-size: 13.5px; color: var(--ink); }
+  .anniv-empty {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px dashed #E2C6B4;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .6);
+    color: var(--accent-2);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+  }
 
   .link-row { display: flex; gap: 8px; align-items: stretch; }
   .link-row .input { flex: 1 1 auto; min-width: 0; }
@@ -1102,6 +1133,7 @@
   </header>
 
   <main id="view-timeline">
+    <section class="anniv-card empty" id="anniv-card" aria-label="우리 기념일"></section>
     <div class="search-box">
       <svg class="search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <circle cx="11" cy="11" r="7"></circle>
@@ -1163,13 +1195,18 @@
     <section class="panel" id="panel-anniv">
       <h3>💝 우리 기념일</h3>
       <p class="panel-note">
-        처음 만난 날(사귄 날)을 넣으면 함께한 날수와 다가오는 100일·1주년을 보여 주고, 알림으로도 챙겨 드려요.
-        함께 쓰는 앨범에서는 두 사람이 같은 날을 써요.
+        날짜를 넣으면 타임라인 맨 위에 함께한 날수와 다가오는 기념일이 보이고, 알림으로도 챙겨 드려요.
+        함께 쓰는 앨범에서는 두 사람이 같은 날을 써요. 비워 두면 그 기념일은 빠져요.
       </p>
-      <div class="link-row">
-        <input id="set-since" class="input" type="date" aria-label="처음 만난 날">
-        <button type="button" class="btn sm" id="btn-save-since">저장</button>
+      <div class="field">
+        <label class="mini-label" for="set-since">💕 연인이 된 날 <span class="mini-sub">100일·200일…·n주년</span></label>
+        <input id="set-since" class="input" type="date">
       </div>
+      <div class="field">
+        <label class="mini-label" for="set-wedding">💍 결혼기념일 <span class="mini-sub">결혼식 D-day·결혼 n주년</span></label>
+        <input id="set-wedding" class="input" type="date">
+      </div>
+      <button type="button" class="btn primary block" id="btn-save-since">저장</button>
       <p class="key-state" id="since-status"></p>
       <ul class="anniv-list" id="anniv-list"></ul>
     </section>
@@ -1187,7 +1224,7 @@
         <input id="push-change" class="switch" type="checkbox" checked>
       </label>
       <label class="set-row" id="row-push-anniv">
-        <span><span class="lbl">기념일 알림</span><span class="sub">100일·1주년 같은 날의 당일·하루 전·일주일 전</span></span>
+        <span><span class="lbl">기념일 알림</span><span class="sub">100일·n주년·결혼기념일의 당일·하루 전·일주일 전</span></span>
         <input id="push-anniv" class="switch" type="checkbox" checked>
       </label>
       <label class="set-row" id="row-push-time">
@@ -1426,6 +1463,7 @@
   const DEVICE_KEY = 'pickle_photo_album_device_id';
   const PUSH_KEY = 'pickle_photo_album_push';
   const SINCE_KEY = 'pickle_photo_album_since';
+  const WEDDING_KEY = 'pickle_photo_album_wedding';
   /* Firebase 콘솔 → 프로젝트 설정 → 클라우드 메시징 → 웹 푸시 인증서(공개 키) — 캘린더와 같은 키 */
   const VAPID_KEY = 'BA6nKAfzBNESVi8eF5TW9RFwG5uU0RsJMscXyXNLe5SmN49g78AL7CJc31cO9sEggTQAo_2baLhU01x-Wx-humU';
 
@@ -1525,6 +1563,8 @@
   const $ = (sel) => document.querySelector(sel);
   const el = {
     setSince: $('#set-since'),
+    setWedding: $('#set-wedding'),
+    annivCard: $('#anniv-card'),
     btnSaveSince: $('#btn-save-since'),
     sinceStatus: $('#since-status'),
     annivList: $('#anniv-list'),
@@ -2596,8 +2636,11 @@
   function applyRoomMeta(meta) {
     shared.room = meta || null;
     if (!meta) return;
-    if (isSinceDate(meta.since)) saveLocalSince(meta.since); /* 혼자 쓰기로 돌아가도 남도록 */
+    /* 혼자 쓰기로 돌아가도 남도록 이 기기에도 적어 둡니다 */
+    if (isSinceDate(meta.since)) saveLocalAnniv('since', meta.since);
+    if (isSinceDate(meta.wedding)) saveLocalAnniv('wedding', meta.wedding);
     renderHeader();
+    renderAnnivCard();
     const remote = meta.cloudinary;
     if (remote && remote.cloudName && remote.uploadPreset) {
       /* 이 기기에 저장된 설정이 없을 때만 방의 설정을 받아 둡니다.
@@ -2905,12 +2948,10 @@
   function renderHeader() {
     const days = state.days.length;
     const photos = photoCountOf(state.days);
-    const since = currentSince();
-    const together = since ? '함께한 지 ' + Math.max(daysTogether(since, todayISO()), 1) + '일째' : '';
     if (!days) {
-      el.headSub.textContent = together || '날짜마다 추억을 모아 두세요';
+      el.headSub.textContent = '날짜마다 추억을 모아 두세요';
     } else {
-      el.headSub.textContent = (together ? together + ' · ' : '') + '추억 ' + days + '일 · 사진 ' + photos + '장';
+      el.headSub.textContent = '추억 ' + days + '일 · 사진 ' + photos + '장';
     }
     el.roomChip.classList.toggle('hidden', !shared.active);
     if (shared.active) {
@@ -3145,6 +3186,7 @@
 
   function renderAll() {
     renderHeader();
+    renderAnnivCard();
     renderTimeline();
     renderPhotos();
     if (state.view === 'settings') renderSettings();
@@ -3574,26 +3616,33 @@
     renderAll();
   }
 
-  /* ---------------------------------------------------------------- 기념일 */
+  /* ---------------------------------------------------------------- 기념일
+     since   = 연인이 된 날(이날이 1일째) → 100일 단위·n주년
+     wedding = 결혼기념일 → 결혼식 당일(앞으로라면 D-day)·결혼 n주년
+     함께 쓰는 앨범이면 방 문서(albums/{방})에, 아니면 이 기기에 둡니다. 서버 알림도 같은 규칙. */
+  const ANNIV_FIELDS = { since: SINCE_KEY, wedding: WEDDING_KEY };
+
   function isSinceDate(v) {
     return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !!parseISODate(v);
   }
 
-  function localSince() {
-    try { const v = localStorage.getItem(SINCE_KEY) || ''; return isSinceDate(v) ? v : ''; } catch (e) { return ''; }
+  function localAnniv(field) {
+    try { const v = localStorage.getItem(ANNIV_FIELDS[field]) || ''; return isSinceDate(v) ? v : ''; } catch (e) { return ''; }
   }
 
-  function saveLocalSince(v) {
+  function saveLocalAnniv(field, v) {
     try {
-      if (v) localStorage.setItem(SINCE_KEY, v); else localStorage.removeItem(SINCE_KEY);
+      if (v) localStorage.setItem(ANNIV_FIELDS[field], v); else localStorage.removeItem(ANNIV_FIELDS[field]);
     } catch (e) {}
   }
 
-  /* 함께 쓰는 앨범이면 방에 적힌 날, 아니면 이 기기에 적은 날 */
-  function currentSince() {
-    if (shared.active) return shared.room && isSinceDate(shared.room.since) ? shared.room.since : '';
-    return localSince();
+  function currentAnniv(field) {
+    if (shared.active) return shared.room && isSinceDate(shared.room[field]) ? shared.room[field] : '';
+    return localAnniv(field);
   }
+
+  function currentSince() { return currentAnniv('since'); }
+  function currentWedding() { return currentAnniv('wedding'); }
 
   function utcDay(iso) {
     return Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
@@ -3602,6 +3651,10 @@
   /* 시작한 날이 1일째 */
   function daysTogether(since, date) {
     return Math.round((utcDay(date) - utcDay(since)) / 86400000) + 1;
+  }
+
+  function daysUntil(date, today) {
+    return Math.round((utcDay(date) - utcDay(today)) / 86400000);
   }
 
   function addDaysISO(iso, n) {
@@ -3613,83 +3666,171 @@
     return (+iso.slice(5, 7)) + '/' + (+iso.slice(8, 10)) + '(' + WEEK[wd] + ')';
   }
 
-  /* 오늘 이후 다가오는 기념일 (100일 단위·n주년) — 서버의 알림 계산과 같은 규칙 */
-  function upcomingAnniversaries(since, today, limit) {
+  /* 그해의 같은 달·일 (윤일에 시작했으면 평년에는 2월 28일) */
+  function sameDayInYear(start, y) {
+    let md = start.slice(5);
+    const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+    if (md === '02-29' && !leap) md = '02-28';
+    return y + '-' + md;
+  }
+
+  /* 오늘 이후 다가오는 기념일 — [{date, name, kind:'love'|'wedding'}] */
+  function upcomingAnniversaries(since, wedding, today, limit) {
     const out = [];
-    const n = daysTogether(since, today);
-    for (let k = Math.max(1, Math.ceil(n / 100)); out.length < limit * 2 && k < 200; k++) {
-      const date = addDaysISO(since, k * 100 - 1);
-      if (date >= today && date > since) out.push({ date: date, name: (k * 100) + '일' });
+    const ty = +today.slice(0, 4);
+    if (since) {
+      const n = daysTogether(since, today);
+      for (let k = Math.max(1, Math.ceil(n / 100)), c = 0; c < limit && k < 400; k++) {
+        const date = addDaysISO(since, k * 100 - 1);
+        if (date >= today && date > since) { out.push({ date: date, name: (k * 100) + '일', kind: 'love' }); c++; }
+      }
+      const sy = +since.slice(0, 4);
+      for (let y = Math.max(sy + 1, ty); y <= Math.max(sy + 1, ty) + limit; y++) {
+        const date = sameDayInYear(since, y);
+        if (date >= today) out.push({ date: date, name: (y - sy) + '주년', kind: 'love' });
+      }
     }
-    const sy = +since.slice(0, 4);
-    for (let y = Math.max(sy + 1, +today.slice(0, 4)); y < Math.max(sy + 1, +today.slice(0, 4)) + limit + 1; y++) {
-      let md = since.slice(5);
-      const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-      if (md === '02-29' && !leap) md = '02-28';
-      const date = y + '-' + md;
-      if (date >= today) out.push({ date: date, name: (y - sy) + '주년' });
+    if (wedding) {
+      if (wedding >= today) out.push({ date: wedding, name: '결혼식', kind: 'wedding' });
+      const wy = +wedding.slice(0, 4);
+      for (let y = Math.max(wy + 1, ty); y <= Math.max(wy + 1, ty) + limit; y++) {
+        const date = sameDayInYear(wedding, y);
+        if (date >= today) out.push({ date: date, name: '결혼 ' + (y - wy) + '주년', kind: 'wedding' });
+      }
     }
     out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     /* 같은 날이면 하나로 합칩니다 */
     const merged = [];
     out.forEach((m) => {
       const last = merged[merged.length - 1];
-      if (last && last.date === m.date) last.name += ' · ' + m.name;
-      else merged.push({ date: m.date, name: m.name });
+      if (last && last.date === m.date) { last.name += ' · ' + m.name; if (m.kind === 'wedding') last.kind = 'wedding'; }
+      else merged.push({ date: m.date, name: m.name, kind: m.kind });
     });
     return merged.slice(0, limit);
   }
 
+  function ddayText(left) {
+    return left === 0 ? '오늘!' : 'D-' + left;
+  }
+
+  /* 「함께한 지 775일째」, 「결혼한 지 n일째」 / 「결혼식 D-30」 */
+  function annivSummary(since, wedding, today) {
+    const out = [];
+    if (since) {
+      const n = daysTogether(since, today);
+      out.push(n >= 1
+        ? { icon: '💕', label: '함께한 지', value: n.toLocaleString('ko-KR') + '일째' }
+        : { icon: '💕', label: '연인이 되는 날까지', value: 'D-' + (1 - n) });
+    }
+    if (wedding) {
+      const w = daysTogether(wedding, today);
+      out.push(w >= 1
+        ? { icon: '💍', label: '결혼한 지', value: w.toLocaleString('ko-KR') + '일째' }
+        : { icon: '💍', label: '결혼식까지', value: 'D-' + (1 - w) });
+    }
+    return out;
+  }
+
+  function annivListItems(list, today) {
+    return list.map((m) => {
+      const li = document.createElement('li');
+      li.className = m.kind === 'wedding' ? 'wedding' : '';
+      const what = document.createElement('span');
+      what.textContent = (m.kind === 'wedding' ? '💍 ' : '💕 ') + m.name + ' · ' + shortDateLabel(m.date);
+      const dd = document.createElement('span');
+      dd.className = 'dd';
+      dd.textContent = ddayText(daysUntil(m.date, today));
+      li.appendChild(what);
+      li.appendChild(dd);
+      return li;
+    });
+  }
+
   function renderAnniversary() {
     const since = currentSince();
+    const wedding = currentWedding();
     syncInput(el.setSince, since);
+    syncInput(el.setWedding, wedding);
     el.annivList.innerHTML = '';
-    if (!since) {
+    if (!since && !wedding) {
       el.sinceStatus.textContent = '아직 정하지 않았어요.';
       el.sinceStatus.className = 'key-state';
       return;
     }
     const today = todayISO();
-    const n = daysTogether(since, today);
-    el.sinceStatus.textContent = n >= 1
-      ? '오늘은 함께한 지 ' + n + '일째예요.'
-      : '시작하는 날까지 ' + (1 - n) + '일 남았어요.';
+    el.sinceStatus.textContent = annivSummary(since, wedding, today)
+      .map((x) => x.label + ' ' + x.value).join(' · ');
     el.sinceStatus.className = 'key-state on';
-    upcomingAnniversaries(since, today, 4).forEach((m) => {
-      const left = Math.round((utcDay(m.date) - utcDay(today)) / 86400000);
-      const li = document.createElement('li');
-      const what = document.createElement('span');
-      what.textContent = m.name + ' · ' + shortDateLabel(m.date);
-      const dd = document.createElement('span');
-      dd.className = 'dd';
-      dd.textContent = left === 0 ? '오늘!' : 'D-' + left;
-      li.appendChild(what);
-      li.appendChild(dd);
-      el.annivList.appendChild(li);
+    annivListItems(upcomingAnniversaries(since, wedding, today, 5), today)
+      .forEach((li) => el.annivList.appendChild(li));
+  }
+
+  /* 타임라인 맨 위 카드 */
+  function renderAnnivCard() {
+    const since = currentSince();
+    const wedding = currentWedding();
+    const card = el.annivCard;
+    card.innerHTML = '';
+    if (!since && !wedding) {
+      card.className = 'anniv-card empty';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'anniv-empty';
+      b.textContent = '💝 연인이 된 날·결혼기념일을 넣으면 여기에 D-day가 보여요';
+      b.addEventListener('click', () => { setView('settings'); try { el.setSince.focus(); } catch (e) {} });
+      card.appendChild(b);
+      return;
+    }
+    card.className = 'anniv-card';
+    const today = todayISO();
+    const top = document.createElement('div');
+    top.className = 'anniv-top';
+    annivSummary(since, wedding, today).forEach((x) => {
+      const box = document.createElement('div');
+      box.className = 'anniv-stat';
+      const l = document.createElement('span');
+      l.className = 'l';
+      l.textContent = x.icon + ' ' + x.label;
+      const v = document.createElement('span');
+      v.className = 'v';
+      v.textContent = x.value;
+      box.appendChild(l);
+      box.appendChild(v);
+      top.appendChild(box);
     });
+    card.appendChild(top);
+    const next = upcomingAnniversaries(since, wedding, today, 3);
+    if (next.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'anniv-list';
+      annivListItems(next, today).forEach((li) => ul.appendChild(li));
+      card.appendChild(ul);
+    }
   }
 
   async function saveSinceFromForm() {
-    const v = String(el.setSince.value || '');
-    if (v && !isSinceDate(v)) { toast('날짜를 확인해 주세요.'); return; }
-    saveLocalSince(v);
+    const values = { since: String(el.setSince.value || ''), wedding: String(el.setWedding.value || '') };
+    if ((values.since && !isSinceDate(values.since)) || (values.wedding && !isSinceDate(values.wedding))) {
+      toast('날짜를 확인해 주세요.');
+      return;
+    }
     if (shared.active && shared.fs) {
       const mod = shared.fs.mod;
       const ref = mod.doc(shared.fs.db, ALBUM_COLLECTION, shared.roomId);
       const patch = { updatedAt: mod.serverTimestamp() };
-      patch.since = v || mod.deleteField();
+      Object.keys(values).forEach((k) => { patch[k] = values[k] || mod.deleteField(); });
       try {
         await mod.updateDoc(ref, patch);
-        shared.room = Object.assign({}, shared.room || {});
-        if (v) shared.room.since = v; else delete shared.room.since;
       } catch (err) {
         toast('함께 쓰는 앨범에 저장하지 못했어요: ' + shareErrorMessage(err));
         return;
       }
+      shared.room = Object.assign({}, shared.room || {});
+      Object.keys(values).forEach((k) => { if (values[k]) shared.room[k] = values[k]; else delete shared.room[k]; });
     }
-    renderHeader();
-    renderSettings();
-    toast(v ? '우리 기념일을 저장했어요.' : '기념일을 지웠어요.');
+    Object.keys(values).forEach((k) => saveLocalAnniv(k, values[k]));
+    renderAll();
+    toast(values.since || values.wedding ? '우리 기념일을 저장했어요.' : '기념일을 지웠어요.');
   }
 
   /* ---------------------------------------------------------------- 알림 */

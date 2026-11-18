@@ -7,7 +7,7 @@
  *    오늘·내일·모레… 일정(일정마다 고른 「며칠 전」)을 알린다.
  * 우리 사진첩(albums/…)
  * 3) albumDayChanged   : 추억이 새로 담기거나 사진이 늘면 같은 앨범의 다른 기기에 바로 알린다.
- * 4) albumAnniversaries: 5분마다 돌며, 각 기기의 알림 시간이 되면 100일·n주년 같은 기념일을
+ * 4) albumAnniversaries: 5분마다 돌며, 각 기기의 알림 시간이 되면 100일·n주년·결혼기념일을
  *    당일·하루 전·일주일 전에 알린다.
  * 받을 수 없는 토큰(앱 삭제 등)은 기기 문서를 지워 정리한다.
  */
@@ -166,9 +166,9 @@ exports.albumAnniversaries = onSchedule({ schedule: 'every 5 minutes', timeZone:
 
   for (const [albumId, due] of byAlbum) {
     const albumSnap = await db.collection('albums').doc(albumId).get();
-    const since = albumSnap.exists ? albumSnap.get('since') : '';
+    const dates = albumSnap.exists ? { since: albumSnap.get('since'), wedding: albumSnap.get('wedding') } : {};
     for (const t of due) {
-      const notes = albumLogic.buildAnniversaryNotes(since, t.date);
+      const notes = albumLogic.buildAnniversaryNotes(dates, t.date);
       for (const note of notes) {
         if (t.dead) break;
         note.tag = 'anniv-' + note.date;

@@ -80,3 +80,30 @@ test('기념일 알림 — 당일·하루 전·일주일 전', () => {
   assert.deepEqual(A.buildAnniversaryNotes(since, '2026-04-05'), []);
   assert.deepEqual(A.buildAnniversaryNotes('', '2026-04-10'), []);
 });
+
+test('결혼기념일 — 결혼식 당일·n주년', () => {
+  assert.deepEqual(A.weddingMilestonesOn('2026-05-09', '2026-05-09'), ['결혼식']);
+  assert.deepEqual(A.weddingMilestonesOn('2026-05-09', '2027-05-09'), ['결혼 1주년']);
+  assert.deepEqual(A.weddingMilestonesOn('2026-05-09', '2026-05-08'), []);
+  assert.deepEqual(A.weddingMilestonesOn('', '2027-05-09'), []);
+});
+
+test('기념일 알림 — 연인·결혼 함께', () => {
+  const dates = { since: '2024-10-05', wedding: '2026-05-09' };
+  const wed = A.buildAnniversaryNotes(dates, '2027-05-09');
+  assert.equal(wed.length, 1);
+  assert.equal(wed[0].title, '💝 오늘은 우리 결혼 1주년이에요');
+  assert.equal(wed[0].body, '결혼한 지 366일째, 축하해요!');
+
+  const day = A.buildAnniversaryNotes(dates, '2026-05-09');
+  assert.equal(day[0].title, '💝 오늘은 우리 결혼식이에요');
+  assert.match(day[0].body, /드디어 결혼식 날/);
+
+  const eve = A.buildAnniversaryNotes(dates, '2026-05-08');
+  assert.equal(eve[0].title, '💝 내일은 우리 결혼식');
+
+  // 연인 800일 (2024-10-05 + 799일 = 2026-12-13)
+  const love = A.buildAnniversaryNotes(dates, '2026-12-13');
+  assert.equal(love[0].title, '💝 오늘은 우리 800일이에요');
+  assert.equal(love[0].body, '10/5(토)부터 함께한 지 800일째, 축하해요!');
+});
