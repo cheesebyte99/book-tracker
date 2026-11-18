@@ -436,6 +436,10 @@
   .link-row .input { flex: 1 1 auto; min-width: 0; }
   .link-row .btn { flex: 0 0 auto; }
 
+  .join-box { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .join-box .key-state { margin-top: 7px; font-weight: 600; word-break: break-word; }
+  .join-box .key-state.warn { font-weight: 700; color: var(--danger); }
+
   .key-state { margin: 9px 0 0; font-size: 12px; font-weight: 700; color: var(--ink-3); line-height: 1.5; }
   .key-state.on { color: var(--done-fg); }
   .key-state.warn { color: var(--danger); }
@@ -1075,6 +1079,18 @@
       <div id="share-local">
         <button type="button" class="btn primary block" id="btn-create-room">공유 링크 만들기</button>
         <p class="key-state" id="share-local-note">지금은 이 기기에만 저장하고 있어요.</p>
+        <div class="join-box" id="join-box">
+          <label class="mini-label" for="join-room">받은 공유 링크로 들어가기</label>
+          <div class="link-row">
+            <input id="join-room" class="input" type="text" inputmode="url" enterkeyhint="go"
+                   autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                   placeholder="…?room=album-xxxxxxxx" aria-label="받은 공유 링크 또는 방 ID">
+            <button type="button" class="btn sm" id="btn-join-room">들어가기</button>
+          </div>
+          <p class="key-state" id="join-room-note" aria-live="polite">
+            상대에게 받은 링크를 붙여 넣으면 같은 앨범을 함께 봐요. 홈 화면으로 열어도 여기서 한 번만 넣으면 돼요.
+          </p>
+        </div>
       </div>
       <div id="share-room" class="hidden">
         <label class="mini-label" for="share-link">공유 링크</label>
@@ -1380,7 +1396,8 @@
     lb: null,          /* { dayId, index } */
     storageMode: '',
     storageError: '',
-    uploadQuality: ''  /* '' = 아직 안 읽음 → localStorage 에서 읽습니다 */
+    uploadQuality: '', /* '' = 아직 안 읽음 → localStorage 에서 읽습니다 */
+    joining: false     /* 받은 링크로 앨범에 들어가는 중 */
   };
 
   const local = { days: [] };   /* 이 기기에만 있는 앨범 (혼자 모드) */
@@ -1471,6 +1488,10 @@
     btnCreateRoom: $('#btn-create-room'),
     btnCopyLink: $('#btn-copy-link'),
     btnLeaveRoom: $('#btn-leave-room'),
+    joinBox: $('#join-box'),
+    joinRoom: $('#join-room'),
+    joinNote: $('#join-room-note'),
+    btnJoinRoom: $('#btn-join-room'),
 
     setCloudName: $('#set-cloud-name'),
     setPreset: $('#set-preset'),
@@ -2400,6 +2421,25 @@
     try { return normalizeRoomId(localStorage.getItem(SHARE_ROOM_KEY) || ''); } catch (e) { return ''; }
   }
 
+  /* 붙여 넣은 공유 링크나 방 ID 에서 방 ID 만 꺼냅니다.
+     …?room=album-xxxxxxxx 같은 주소와 album-xxxxxxxx 만 적은 경우를 모두 받습니다. */
+  function roomIdFromInput(raw) {
+    let text = String(raw == null ? '' : raw).trim();
+    if (!text) return '';
+    const match = text.match(/[?&#]room=([^&#\s]*)/i);
+    if (match) {
+      try { text = decodeURIComponent(match[1]); } catch (e) { text = match[1]; }
+    } else if (/[\s\/?#]/.test(text) || text.indexOf('room=') !== -1) {
+      /* 주소를 넣었는데 room 값이 없으면 앨범 링크가 아닙니다. */
+      return '';
+    }
+    return normalizeRoomId(text);
+  }
+
+  function usableRoomId(roomId) {
+    return /^[a-z0-9][a-z0-9-]{5,39}$/.test(String(roomId || ''));
+  }
+
   function shareErrorMessage(err) {
     const text = String((err && (err.code || err.message)) || '').toLowerCase();
     if (text.indexOf('permission-denied') !== -1) return 'Firestore 규칙에 앨범 경로가 아직 없어요 (firestore.rules 게시 필요)';
@@ -2926,6 +2966,7 @@
     } else {
       el.shareLocalNote.textContent = '지금은 이 기기에만 저장하고 있어요.';
       el.shareLocalNote.className = 'key-state';
+      if (el.joinNote && !String(el.joinNote.textContent || '').trim()) setJoinNote('', '');
     }
 
     el.storeMode.textContent = store.mode === 'idb' ? 'IndexedDB (넉넉함)' : (store.mode === 'ls' ? 'localStorage (약 5MB)' : '확인 중');
@@ -3540,6 +3581,10 @@
     el.btnCreateRoom.addEventListener('click', createRoom);
     el.btnCopyLink.addEventListener('click', copyShareLink);
     el.btnLeaveRoom.addEventListener('click', leaveRoom);
+    el.btnJoinRoom.addEventListener('click', joinSharedFromInput);
+    el.joinRoom.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); joinSharedFromInput(); }
+    });
 
     /* ---- 설정: Cloudinary ---- */
     el.btnSaveCloud.addEventListener('click', saveCloudinaryFromForm);
@@ -3609,6 +3654,69 @@
       el.btnCreateRoom.disabled = false;
       el.btnCreateRoom.textContent = '공유 링크 만들기';
       renderSettings();
+    }
+  }
+
+  const JOIN_HINT = '상대에게 받은 링크를 붙여 넣으면 같은 앨범을 함께 봐요. 홈 화면으로 열어도 여기서 한 번만 넣으면 돼요.';
+
+  function setJoinNote(text, tone) {
+    if (!el.joinNote) return;
+    el.joinNote.textContent = text === '' ? JOIN_HINT : text;
+    el.joinNote.className = 'key-state' + (tone ? ' ' + tone : '');
+  }
+
+  async function joinSharedFromInput() {
+    if (state.joining) return;
+    const raw = String((el.joinRoom && el.joinRoom.value) || '');
+    if (!raw.trim()) {
+      setJoinNote('받은 공유 링크를 붙여 넣거나 album-… 방 ID를 적어 주세요.', 'warn');
+      toast('받은 공유 링크를 붙여 넣어 주세요.');
+      try { el.joinRoom.focus(); } catch (e) {}
+      return;
+    }
+    const roomId = roomIdFromInput(raw);
+    if (!usableRoomId(roomId)) {
+      setJoinNote('앨범 링크가 아닌 것 같아요. …?room=album-xxxxxxxx 처럼 생긴 링크를 붙여 넣어 주세요.', 'warn');
+      toast('앨범 링크를 확인해 주세요.');
+      try { el.joinRoom.focus(); } catch (e) {}
+      return;
+    }
+    if (shared.active && shared.roomId === roomId) {
+      setJoinNote('이미 이 앨범을 함께 보고 있어요.', 'on');
+      return;
+    }
+
+    const previousRoom = lastRoomId();
+    state.joining = true;
+    el.btnJoinRoom.disabled = true;
+    el.btnJoinRoom.textContent = '들어가는 중…';
+    setJoinNote('앨범을 여는 중…', '');
+    try {
+      if (shared.active) stopShared();
+      await startShared(roomId);
+      if (shared.error) {
+        /* 링크를 잘못 넣었거나 규칙이 없으면 혼자 쓰던 앨범으로 돌아가요. */
+        const reason = shared.error;
+        stopShared();
+        rememberRoom(previousRoom);
+        setShareUrl('');
+        useLocalAlbum();
+        renderAll();
+        setJoinNote('앨범에 들어가지 못했어요: ' + reason, 'warn');
+        toast('앨범에 들어가지 못했어요: ' + reason);
+        return;
+      }
+      el.joinRoom.value = '';
+      setJoinNote('', '');
+      renderAll();
+      toast('함께 쓰는 앨범에 들어왔어요.');
+    } catch (err) {
+      setJoinNote('앨범에 들어가지 못했어요: ' + shareErrorMessage(err), 'warn');
+      toast('앨범에 들어가지 못했어요: ' + shareErrorMessage(err));
+    } finally {
+      state.joining = false;
+      el.btnJoinRoom.disabled = false;
+      el.btnJoinRoom.textContent = '들어가기';
     }
   }
 

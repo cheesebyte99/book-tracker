@@ -4,7 +4,6 @@
   "description": "데이트한 날, 기념일의 사진을 날짜별로 모아 두는 우리 둘의 사진첩.",
   "lang": "ko",
   "dir": "ltr",
-  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
