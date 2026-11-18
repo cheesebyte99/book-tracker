@@ -48,7 +48,7 @@
 | `calendar/index.html` | 우리들의 캘린더 앱 본체 (같은 저장소의 하위 경로로 배포) |
 | `calendar/manifest.webmanifest`, `calendar/icon*.png`, `calendar/icon.svg`, `calendar/apple-touch-icon.png` | 캘린더 홈 화면 아이콘·앱 정보 |
 | `android/` | 우리들의 캘린더 안드로이드 앱(APK) 프로젝트 |
-| `photo-album/` | 우리 사진첩 (데이트·기념일 공유 앨범) |
+| `photo-album/` | 우리 사진첩 (데이트·기념일 공유 앨범, `firebase-messaging-sw.js` 는 웹 푸시용) |
 | `android-photo-album/` | 우리 사진첩 안드로이드 앱(APK) 프로젝트 |
 | `firebase/functions/`, `firebase.json`, `.firebaserc` | 푸시 알림 서버(Cloud Functions)와 Firebase CLI 배포 설정 |
 | `firebase/firestore.rules` | Firestore 보안 규칙 (CLI 로 배포) |
@@ -174,6 +174,7 @@ firebase deploy --only firestore:rules,functions   # firebase.json · .firebaser
 - 공유 링크 **복사** → 카카오톡 등으로 바로 보내는 공유 창
 - 받은 공유 링크를 누르거나 「공유 → 우리 사진첩」으로 보내면 그 앨범으로 바로 열림
 - 사진 여러 장 한 번에 고르기, 뒤로 가기로 창 닫기·타임라인으로 돌아가기
+- 푸시 알림(네이티브 FCM) — `android-photo-album/app/google-services.json` 이 있을 때만 켜짐 (아래 참고)
 
 ```bash
 cd android-photo-album
@@ -183,6 +184,23 @@ cd android-photo-album
 GitHub Actions(`.github/workflows/photo-album-apk.yml`)가 `android-photo-album/`·`photo-album/` 변경 때마다 APK 를 만들어
 Actions 아티팩트(`our-photo-album-apk`)로 올리고, `main` 에서는 「우리 사진첩 APK」 릴리스로도 올립니다.
 서명 키는 캘린더 앱과 같은 방식(비밀값 `ANDROID_KEYSTORE_*`, 없으면 `debug.keystore`)입니다.
+
+### 💝 기념일 · 🔔 사진첩 알림
+
+- **기념일(설정 → 💝 우리 기념일)**: 처음 만난 날을 넣으면 헤더에 「함께한 지 n일째」, 설정에 다가오는 100일 단위·n주년과 D-day 를 보여 줍니다.
+  함께 쓰는 앨범에서는 앨범 문서 `albums/{방ID}.since` 에 저장돼 두 사람이 같은 날을 씁니다(시작한 날이 1일째).
+- **알림(설정 → 🔔 알림)**: 알림 받기 · 새 추억·사진 알림 · 기념일 알림 · 기념일 알림 시간(기본 09:00). 함께 쓰는 앨범에서만 동작하며,
+  켜면 `albums/{방ID}/devices/{기기ID}` 에 토큰·설정을 등록합니다(앱은 쓰기·지우기만, 읽기는 서버만).
+- **서버**(`firebase/functions`, 캘린더와 같은 코드베이스):
+  - `albumDayChanged` — 상대가 새 추억을 담거나 사진을 더 올리거나 날짜·제목·장소·메모를 고치면 「○○님이 「제목」에 사진 3장을 올렸어요」.
+    저장할 때 앱이 `editedBy`(기기)·`editor`(이름)·`photoCount` 를 적어 두어, 올린 사람 본인에게는 보내지 않습니다.
+    사진 빼기·설명만 바꾸기·삭제, 혼자 쓰던 추억을 방으로 옮길 때는 알리지 않습니다.
+  - `albumAnniversaries` — 5분마다, 각 기기의 알림 시간에 100일·200일…·n주년을 **당일·하루 전·일주일 전** 알림(하루 한 번, `lastRemind`). 판단 로직은 `album-logic.js`.
+- **받는 쪽**: 아이폰은 Safari → 공유 → 「홈 화면에 추가」로 연 앱(iOS 16.4 이상)에서 `photo-album/firebase-messaging-sw.js` + VAPID 키(캘린더와 같은 키)로 받습니다.
+  안드로이드 앱은 네이티브 FCM 이라 Firebase 콘솔에 **안드로이드 앱(패키지 `io.github.cheesebyte99.photoalbum`)을 추가**하고 받은
+  `google-services.json` 을 `android-photo-album/app/` 에 넣어야 알림이 켜집니다. 없으면 알림 없이 빌드됩니다.
+- 새 규칙·함수는 위 「배포」 명령(`firebase deploy --only firestore:rules,functions`)으로 올립니다.
+  규칙을 올리기 전에도 추억 저장은 되도록, 예전 규칙이 막으면 알림용 칸 없이 다시 저장합니다.
 
 ## 갱신 방법
 

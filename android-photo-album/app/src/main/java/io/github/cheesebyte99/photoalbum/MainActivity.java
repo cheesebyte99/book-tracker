@@ -63,6 +63,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_FILE = 8;
     private static final int REQ_STORAGE = 9;
+    private static final int REQ_NOTIFICATIONS = 7;
     private static final Pattern ROOM_IN_TEXT = Pattern.compile("[?&]room=([A-Za-z0-9-]{1,40})");
 
     private WebView webView;
@@ -102,6 +103,10 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new Bridge(), "AndroidApp");
         webView.setWebChromeClient(new AlbumChrome());
         webView.setWebViewClient(new AlbumClient());
+
+        Push.createChannel(this);
+        Push.listener = token -> runOnUiThread(() -> sendTokenToPage(token));
+        Push.refreshToken(this);
         // 혹시 페이지가 다운로드로 넘어가면(첨부 파일 응답 등) 직접 저장한다
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, length) ->
                 saveImage(url, null));
@@ -165,6 +170,25 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_NOTIFICATIONS) return;
+        boolean granted = Push.hasPermission(this);
+        webView.evaluateJavascript("window.__onPushPermission && window.__onPushPermission('"
+                + (granted ? "granted" : "denied") + "')", null);
+        if (granted) {
+            String t = Push.savedToken(this);
+            if (!t.isEmpty()) sendTokenToPage(t); else Push.refreshToken(this);
+        }
+    }
+
+    private void sendTokenToPage(String token) {
+        if (webView == null || token == null || token.isEmpty() || !Push.hasPermission(this)) return;
+        webView.evaluateJavascript("window.__onPushToken && window.__onPushToken('"
+                + token.replace("\\", "").replace("'", "") + "')", null);
+    }
+
+    @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         webView.saveState(outState);
@@ -184,6 +208,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        Push.listener = null;
         webView.destroy();
         super.onDestroy();
     }
@@ -226,6 +251,8 @@ public class MainActivity extends Activity {
     /** 공유 링크(VIEW) 또는 공유받은 글(SEND)에서 방 ID 를 꺼낸다. */
     static String roomFromIntent(Intent intent) {
         if (intent == null) return null;
+        String fromPush = intent.getStringExtra("room"); // 알림을 눌러 연 경우
+        if (fromPush != null && fromPush.matches("[a-z0-9-]{1,40}")) return fromPush;
         String text = null;
         if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             text = intent.getData().toString();
@@ -409,6 +436,42 @@ public class MainActivity extends Activity {
 
     /** 페이지에서 window.AndroidApp 으로 부르는 기능. */
     private final class Bridge {
+        /** 이 기기의 FCM 토큰(아직 없거나 알림을 못 쓰면 빈 문자열) */
+        @JavascriptInterface
+        public String getPushToken() {
+            if (!Push.enabled()) return "";
+            String t = Push.savedToken(MainActivity.this);
+            if (t.isEmpty()) Push.refreshToken(MainActivity.this);
+            return t;
+        }
+
+        /** 'granted' | 'default' | 'unavailable' */
+        @JavascriptInterface
+        public String pushPermission() {
+            if (!Push.enabled()) return "unavailable";
+            return Push.hasPermission(MainActivity.this) ? "granted" : "default";
+        }
+
+        @JavascriptInterface
+        public void requestPushPermission() {
+            runOnUiThread(() -> {
+                if (Push.hasPermission(MainActivity.this)) {
+                    onRequestPermissionsResult(REQ_NOTIFICATIONS, new String[0], new int[0]);
+                } else if (Build.VERSION.SDK_INT >= 33) {
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+                } else {
+                    // Android 12 이하: 앱 알림이 꺼져 있으면 설정 화면으로
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                    } catch (ActivityNotFoundException ignored) {
+                        // 무시
+                    }
+                    onRequestPermissionsResult(REQ_NOTIFICATIONS, new String[0], new int[0]);
+                }
+            });
+        }
+
         @JavascriptInterface
         public void share(String text) {
             runOnUiThread(() -> {

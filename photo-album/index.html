@@ -432,6 +432,62 @@
 
   .panel-note { margin: 0 0 12px; font-size: 12.5px; line-height: 1.6; color: var(--ink-3); }
 
+  .set-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 0;
+    border-top: 1px solid var(--line);
+  }
+  .set-row .lbl { display: block; font-size: 14px; font-weight: 800; color: var(--ink); }
+  .set-row .sub { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+  .set-row .input { width: auto; min-height: 40px; padding: 7px 10px; flex: 0 0 auto; }
+  .set-row.off { opacity: .45; }
+  .switch {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: 0 0 auto;
+    position: relative;
+    width: 48px;
+    height: 28px;
+    margin: 0;
+    border-radius: 999px;
+    background: #DCD2C6;
+    cursor: pointer;
+    transition: background .2s ease;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+    transition: transform .2s ease;
+  }
+  .switch:checked { background: var(--accent); }
+  .switch:checked::after { transform: translateX(20px); }
+  .switch:disabled { opacity: .5; cursor: default; }
+  .switch:focus-visible { outline: 3px solid rgba(192, 112, 74, .35); outline-offset: 2px; }
+  .push-status { margin: 0 0 10px; }
+  .push-status[hidden] { display: none; }
+  .anniv-list { list-style: none; margin: 10px 0 0; padding: 0; }
+  .anniv-list:empty { display: none; }
+  .anniv-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px dashed var(--line);
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .anniv-list .dd { font-weight: 800; color: var(--rose); white-space: nowrap; }
+
   .link-row { display: flex; gap: 8px; align-items: stretch; }
   .link-row .input { flex: 1 1 auto; min-width: 0; }
   .link-row .btn { flex: 0 0 auto; }
@@ -1104,6 +1160,42 @@
       </div>
     </section>
 
+    <section class="panel" id="panel-anniv">
+      <h3>💝 우리 기념일</h3>
+      <p class="panel-note">
+        처음 만난 날(사귄 날)을 넣으면 함께한 날수와 다가오는 100일·1주년을 보여 주고, 알림으로도 챙겨 드려요.
+        함께 쓰는 앨범에서는 두 사람이 같은 날을 써요.
+      </p>
+      <div class="link-row">
+        <input id="set-since" class="input" type="date" aria-label="처음 만난 날">
+        <button type="button" class="btn sm" id="btn-save-since">저장</button>
+      </div>
+      <p class="key-state" id="since-status"></p>
+      <ul class="anniv-list" id="anniv-list"></ul>
+    </section>
+
+    <section class="panel" id="panel-push">
+      <h3>🔔 알림</h3>
+      <p class="panel-note">함께 쓰는 앨범에서 상대가 추억을 담거나 사진을 올리면, 그리고 기념일이 다가오면 알려 드려요.</p>
+      <label class="set-row">
+        <span><span class="lbl">알림 받기</span><span class="sub">이 기기로 이 앨범의 알림을 받아요</span></span>
+        <input id="push-toggle" class="switch" type="checkbox">
+      </label>
+      <p class="key-state push-status" id="push-status" aria-live="polite" hidden></p>
+      <label class="set-row" id="row-push-change">
+        <span><span class="lbl">새 추억·사진 알림</span><span class="sub">상대가 추억을 담거나 사진을 올리면 바로</span></span>
+        <input id="push-change" class="switch" type="checkbox" checked>
+      </label>
+      <label class="set-row" id="row-push-anniv">
+        <span><span class="lbl">기념일 알림</span><span class="sub">100일·1주년 같은 날의 당일·하루 전·일주일 전</span></span>
+        <input id="push-anniv" class="switch" type="checkbox" checked>
+      </label>
+      <label class="set-row" id="row-push-time">
+        <span><span class="lbl">기념일 알림 시간</span><span class="sub">이 시각에 기념일 알림이 와요</span></span>
+        <input id="push-time" class="input" type="time" step="300" value="09:00">
+      </label>
+    </section>
+
     <section class="panel">
       <h3>☁️ Cloudinary 사진 저장</h3>
       <p class="panel-note">
@@ -1331,6 +1423,11 @@
     uploadPreset: 'jaeyeon_album_unsigned'
   };
   const SHARE_ROOM_KEY = 'pickle_photo_album_share_room';
+  const DEVICE_KEY = 'pickle_photo_album_device_id';
+  const PUSH_KEY = 'pickle_photo_album_push';
+  const SINCE_KEY = 'pickle_photo_album_since';
+  /* Firebase 콘솔 → 프로젝트 설정 → 클라우드 메시징 → 웹 푸시 인증서(공개 키) — 캘린더와 같은 키 */
+  const VAPID_KEY = 'BA6nKAfzBNESVi8eF5TW9RFwG5uU0RsJMscXyXNLe5SmN49g78AL7CJc31cO9sEggTQAo_2baLhU01x-Wx-humU';
 
   const IDB_NAME = 'pickle_photo_album_db';
   const IDB_STORE = 'album';
@@ -1419,11 +1516,26 @@
     metaApplied: false
   };
 
+  /* 알림: 이 기기의 푸시 토큰과 지금 등록해 둔 방 */
+  const push = { token: '', platform: '', registeredRoom: '', messaging: null };
+
   const profile = { nickname: '' };
 
   /* ---------------------------------------------------------------- DOM */
   const $ = (sel) => document.querySelector(sel);
   const el = {
+    setSince: $('#set-since'),
+    btnSaveSince: $('#btn-save-since'),
+    sinceStatus: $('#since-status'),
+    annivList: $('#anniv-list'),
+    pushToggle: $('#push-toggle'),
+    pushStatus: $('#push-status'),
+    pushChange: $('#push-change'),
+    pushAnniv: $('#push-anniv'),
+    pushTime: $('#push-time'),
+    rowPushChange: $('#row-push-change'),
+    rowPushAnniv: $('#row-push-anniv'),
+    rowPushTime: $('#row-push-time'),
     headSub: $('#head-sub'),
     roomChip: $('#room-chip'),
     roomChipText: $('#room-chip-text'),
@@ -2484,6 +2596,8 @@
   function applyRoomMeta(meta) {
     shared.room = meta || null;
     if (!meta) return;
+    if (isSinceDate(meta.since)) saveLocalSince(meta.since); /* 혼자 쓰기로 돌아가도 남도록 */
+    renderHeader();
     const remote = meta.cloudinary;
     if (remote && remote.cloudName && remote.uploadPreset) {
       /* 이 기기에 저장된 설정이 없을 때만 방의 설정을 받아 둡니다.
@@ -2617,6 +2731,9 @@
   }
 
   function stopShared() {
+    /* 이 방에 등록해 둔 알림은 지웁니다(다른 방으로 옮기거나 혼자 쓰기로 돌아갈 때). */
+    if (push.registeredRoom) unregisterDevice(push.registeredRoom);
+    push.registeredRoom = '';
     shared.active = false;
     if (shared.unsubDays) { try { shared.unsubDays(); } catch (e) {} }
     if (shared.unsubRoom) { try { shared.unsubRoom(); } catch (e) {} }
@@ -2651,6 +2768,7 @@
       toast('공유 연결: ' + shared.error);
     }
     renderAll();
+    if (!shared.error && readPushSettings().enabled) syncPush(false);
   }
 
   function photoDocFor(photo, mod) {
@@ -2715,20 +2833,36 @@
     await Promise.all(jobs);
   }
 
-  async function saveDayShared(day) {
+  /* quiet=true 이면 알림을 보내지 않게 「누가 바꿨는지」를 적지 않습니다(혼자 쓰던 추억을 방으로 옮길 때). */
+  async function saveDayShared(day, quiet) {
     const fs = shared.fs;
     if (!fs) throw new Error('firestore-not-ready');
     const mod = fs.mod;
     const ref = mod.doc(fs.db, ALBUM_COLLECTION, shared.roomId, 'days', day.id);
-    await mod.setDoc(ref, {
+    const doc = {
       date: day.date,
       title: day.title || '',
       place: day.place || '',
       memo: day.memo || '',
       author: day.author || '',
+      photoCount: Math.min((day.photos || []).length, 1000),
       createdAt: toTimestamp(day.createdAt, mod),
       updatedAt: mod.serverTimestamp()
-    });
+    };
+    if (!quiet) {
+      doc.editedBy = getDeviceId();
+      doc.editor = oneLine(profile.nickname).slice(0, MAX_AUTHOR);
+    }
+    try {
+      await mod.setDoc(ref, doc);
+    } catch (err) {
+      /* 알림용 칸을 모르는 예전 Firestore 규칙이면 그 칸 없이 다시 저장합니다(알림만 빠짐). */
+      if (String((err && (err.code || err.message)) || '').indexOf('permission-denied') === -1) throw err;
+      delete doc.editedBy;
+      delete doc.editor;
+      delete doc.photoCount;
+      await mod.setDoc(ref, doc);
+    }
     await syncPhotos(day.id, day.photos, shared.photoMap[day.id] || []);
   }
 
@@ -2746,7 +2880,7 @@
   async function pushLocalDays(days) {
     for (let i = 0; i < days.length; i++) {
       const original = { photos: [], ...days[i] };
-      await saveDayShared(original);
+      await saveDayShared(original, true);
     }
   }
 
@@ -2763,7 +2897,7 @@
         cloudinary: { cloudName: cfg.cloudName, uploadPreset: cfg.uploadPreset },
         createdAt: (shared.room && shared.room.createdAt) || mod.serverTimestamp(),
         updatedAt: mod.serverTimestamp()
-      });
+      }, { merge: true }); /* 기념일(since) 같은 다른 값은 그대로 둡니다 */
     } catch (e) { /* 규칙이 막아도 내 기기 설정은 그대로 씁니다 */ }
   }
 
@@ -2771,10 +2905,12 @@
   function renderHeader() {
     const days = state.days.length;
     const photos = photoCountOf(state.days);
+    const since = currentSince();
+    const together = since ? '함께한 지 ' + Math.max(daysTogether(since, todayISO()), 1) + '일째' : '';
     if (!days) {
-      el.headSub.textContent = '날짜마다 추억을 모아 두세요';
+      el.headSub.textContent = together || '날짜마다 추억을 모아 두세요';
     } else {
-      el.headSub.textContent = '추억 ' + days + '일 · 사진 ' + photos + '장';
+      el.headSub.textContent = (together ? together + ' · ' : '') + '추억 ' + days + '일 · 사진 ' + photos + '장';
     }
     el.roomChip.classList.toggle('hidden', !shared.active);
     if (shared.active) {
@@ -2974,6 +3110,9 @@
       if (el.joinNote && !String(el.joinNote.textContent || '').trim()) setJoinNote('', '');
     }
 
+    renderAnniversary();
+    renderPushSettings();
+
     el.storeMode.textContent = store.mode === 'idb' ? 'IndexedDB (넉넉함)' : (store.mode === 'ls' ? 'localStorage (약 5MB)' : '확인 중');
     el.storeMode.className = 'v' + (store.mode ? ' ok' : '');
     el.storeDays.textContent = state.days.length + '일';
@@ -2995,7 +3134,10 @@
       tab.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     el.fab.classList.toggle('hidden', view === 'settings');
-    if (view === 'settings') renderSettings();
+    if (view === 'settings') {
+      renderSettings();
+      if (readPushSettings().enabled) syncPush(false);
+    }
     if (view === 'photos') renderPhotos();
     if (view === 'timeline') renderTimeline();
     try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch (e) { window.scrollTo(0, 0); }
@@ -3432,6 +3574,341 @@
     renderAll();
   }
 
+  /* ---------------------------------------------------------------- 기념일 */
+  function isSinceDate(v) {
+    return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !!parseISODate(v);
+  }
+
+  function localSince() {
+    try { const v = localStorage.getItem(SINCE_KEY) || ''; return isSinceDate(v) ? v : ''; } catch (e) { return ''; }
+  }
+
+  function saveLocalSince(v) {
+    try {
+      if (v) localStorage.setItem(SINCE_KEY, v); else localStorage.removeItem(SINCE_KEY);
+    } catch (e) {}
+  }
+
+  /* 함께 쓰는 앨범이면 방에 적힌 날, 아니면 이 기기에 적은 날 */
+  function currentSince() {
+    if (shared.active) return shared.room && isSinceDate(shared.room.since) ? shared.room.since : '';
+    return localSince();
+  }
+
+  function utcDay(iso) {
+    return Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+  }
+
+  /* 시작한 날이 1일째 */
+  function daysTogether(since, date) {
+    return Math.round((utcDay(date) - utcDay(since)) / 86400000) + 1;
+  }
+
+  function addDaysISO(iso, n) {
+    return new Date(utcDay(iso) + n * 86400000).toISOString().slice(0, 10);
+  }
+
+  function shortDateLabel(iso) {
+    const wd = new Date(utcDay(iso)).getUTCDay();
+    return (+iso.slice(5, 7)) + '/' + (+iso.slice(8, 10)) + '(' + WEEK[wd] + ')';
+  }
+
+  /* 오늘 이후 다가오는 기념일 (100일 단위·n주년) — 서버의 알림 계산과 같은 규칙 */
+  function upcomingAnniversaries(since, today, limit) {
+    const out = [];
+    const n = daysTogether(since, today);
+    for (let k = Math.max(1, Math.ceil(n / 100)); out.length < limit * 2 && k < 200; k++) {
+      const date = addDaysISO(since, k * 100 - 1);
+      if (date >= today && date > since) out.push({ date: date, name: (k * 100) + '일' });
+    }
+    const sy = +since.slice(0, 4);
+    for (let y = Math.max(sy + 1, +today.slice(0, 4)); y < Math.max(sy + 1, +today.slice(0, 4)) + limit + 1; y++) {
+      let md = since.slice(5);
+      const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+      if (md === '02-29' && !leap) md = '02-28';
+      const date = y + '-' + md;
+      if (date >= today) out.push({ date: date, name: (y - sy) + '주년' });
+    }
+    out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    /* 같은 날이면 하나로 합칩니다 */
+    const merged = [];
+    out.forEach((m) => {
+      const last = merged[merged.length - 1];
+      if (last && last.date === m.date) last.name += ' · ' + m.name;
+      else merged.push({ date: m.date, name: m.name });
+    });
+    return merged.slice(0, limit);
+  }
+
+  function renderAnniversary() {
+    const since = currentSince();
+    syncInput(el.setSince, since);
+    el.annivList.innerHTML = '';
+    if (!since) {
+      el.sinceStatus.textContent = '아직 정하지 않았어요.';
+      el.sinceStatus.className = 'key-state';
+      return;
+    }
+    const today = todayISO();
+    const n = daysTogether(since, today);
+    el.sinceStatus.textContent = n >= 1
+      ? '오늘은 함께한 지 ' + n + '일째예요.'
+      : '시작하는 날까지 ' + (1 - n) + '일 남았어요.';
+    el.sinceStatus.className = 'key-state on';
+    upcomingAnniversaries(since, today, 4).forEach((m) => {
+      const left = Math.round((utcDay(m.date) - utcDay(today)) / 86400000);
+      const li = document.createElement('li');
+      const what = document.createElement('span');
+      what.textContent = m.name + ' · ' + shortDateLabel(m.date);
+      const dd = document.createElement('span');
+      dd.className = 'dd';
+      dd.textContent = left === 0 ? '오늘!' : 'D-' + left;
+      li.appendChild(what);
+      li.appendChild(dd);
+      el.annivList.appendChild(li);
+    });
+  }
+
+  async function saveSinceFromForm() {
+    const v = String(el.setSince.value || '');
+    if (v && !isSinceDate(v)) { toast('날짜를 확인해 주세요.'); return; }
+    saveLocalSince(v);
+    if (shared.active && shared.fs) {
+      const mod = shared.fs.mod;
+      const ref = mod.doc(shared.fs.db, ALBUM_COLLECTION, shared.roomId);
+      const patch = { updatedAt: mod.serverTimestamp() };
+      patch.since = v || mod.deleteField();
+      try {
+        await mod.updateDoc(ref, patch);
+        shared.room = Object.assign({}, shared.room || {});
+        if (v) shared.room.since = v; else delete shared.room.since;
+      } catch (err) {
+        toast('함께 쓰는 앨범에 저장하지 못했어요: ' + shareErrorMessage(err));
+        return;
+      }
+    }
+    renderHeader();
+    renderSettings();
+    toast(v ? '우리 기념일을 저장했어요.' : '기념일을 지웠어요.');
+  }
+
+  /* ---------------------------------------------------------------- 알림 */
+  function getDeviceId() {
+    let id = '';
+    try { id = localStorage.getItem(DEVICE_KEY) || ''; } catch (e) { id = ''; }
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(id)) return id;
+    const bytes = new Uint8Array(15);
+    window.crypto.getRandomValues(bytes);
+    id = 'd' + Array.prototype.map.call(bytes, (b) => ('0' + b.toString(16)).slice(-2)).join('');
+    try { localStorage.setItem(DEVICE_KEY, id); } catch (e) {}
+    return id;
+  }
+
+  function readPushSettings() {
+    const out = { enabled: false, remindTime: '09:00', changeAlerts: true, annivAlerts: true };
+    try {
+      const raw = JSON.parse(localStorage.getItem(PUSH_KEY) || '{}');
+      if (typeof raw.enabled === 'boolean') out.enabled = raw.enabled;
+      if (/^([01]\d|2[0-3]):[0-5]\d$/.test(raw.remindTime || '')) out.remindTime = raw.remindTime;
+      if (typeof raw.changeAlerts === 'boolean') out.changeAlerts = raw.changeAlerts;
+      if (typeof raw.annivAlerts === 'boolean') out.annivAlerts = raw.annivAlerts;
+    } catch (e) {}
+    return out;
+  }
+
+  function savePushSettings(next) {
+    try { localStorage.setItem(PUSH_KEY, JSON.stringify(next)); } catch (e) {}
+  }
+
+  function isAndroidApp() {
+    return !!(window.AndroidApp && typeof window.AndroidApp.getPushToken === 'function');
+  }
+
+  function isIOS() {
+    const ua = navigator.userAgent || '';
+    return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandalone() {
+    return navigator.standalone === true ||
+      !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  }
+
+  /* 이 기기에서 쓸 수 있는 푸시 방식 */
+  function pushSupport() {
+    if (isAndroidApp()) {
+      let perm = '';
+      try { perm = String(window.AndroidApp.pushPermission()); } catch (e) { perm = ''; }
+      return perm === 'unavailable' ? 'app-no-fcm' : 'android';
+    }
+    if (window.AndroidApp) return 'app-old'; /* 알림 기능이 없던 예전 안드로이드 앱 */
+    if (isIOS() && !isStandalone()) return 'ios-browser';
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
+    return 'web';
+  }
+
+  function setPushStatus(text, tone) {
+    el.pushStatus.hidden = !text;
+    el.pushStatus.textContent = text || '';
+    el.pushStatus.className = 'key-state push-status' + (tone ? ' ' + tone : '');
+  }
+
+  /* 안드로이드 앱(네이티브)이 토큰·권한 결과를 알려 줄 때 부르는 함수 */
+  let androidWaiters = [];
+  window.__onPushToken = function (token) {
+    push.token = String(token || '');
+    const waiting = androidWaiters;
+    androidWaiters = [];
+    waiting.forEach((fn) => fn(push.token));
+    if (push.token && push.platform === 'android' && push.registeredRoom) registerDevice().catch(() => {});
+  };
+  window.__onPushPermission = function (result) {
+    if (result !== 'granted') {
+      const waiting = androidWaiters;
+      androidWaiters = [];
+      waiting.forEach((fn) => fn(''));
+    }
+  };
+
+  function androidToken(interactive) {
+    return new Promise((resolve) => {
+      let now = '';
+      try { now = String(window.AndroidApp.getPushToken() || ''); } catch (e) { now = ''; }
+      let perm = 'granted';
+      try { perm = String(window.AndroidApp.pushPermission()); } catch (e) { perm = 'granted'; }
+      if (now && perm === 'granted') { resolve(now); return; }
+      if (perm !== 'granted' && !interactive) { resolve(''); return; }
+      androidWaiters.push(resolve);
+      if (perm !== 'granted') {
+        try { window.AndroidApp.requestPushPermission(); } catch (e) {}
+      }
+      setTimeout(() => {
+        const i = androidWaiters.indexOf(resolve);
+        if (i !== -1) { androidWaiters.splice(i, 1); resolve(''); }
+      }, 20000);
+    });
+  }
+
+  async function webMessaging() {
+    if (push.messaging) return push.messaging;
+    const fs = await loadFirestore();
+    const base = 'https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/';
+    const mod = await import(base + 'firebase-messaging.js');
+    if (typeof mod.isSupported === 'function' && !(await mod.isSupported())) throw new Error('unsupported');
+    const messaging = mod.getMessaging(fs.app);
+    mod.onMessage(messaging, (payload) => {
+      const n = (payload && payload.notification) || {};
+      toast((n.title ? n.title + ' — ' : '') + (n.body || '새 알림'));
+    });
+    push.messaging = { mod: mod, messaging: messaging };
+    return push.messaging;
+  }
+
+  async function webToken(interactive) {
+    if (Notification.permission === 'denied') return '';
+    if (Notification.permission !== 'granted') {
+      if (!interactive) return '';
+      const res = await Notification.requestPermission();
+      if (res !== 'granted') return '';
+    }
+    const m = await webMessaging();
+    const reg = await navigator.serviceWorker.register('firebase-messaging-sw.js', { scope: './' });
+    return await m.mod.getToken(m.messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+  }
+
+  async function obtainToken(interactive) {
+    const kind = pushSupport();
+    if (kind === 'android') { push.platform = 'android'; return androidToken(interactive); }
+    if (kind === 'web') { push.platform = 'web'; return webToken(interactive); }
+    return '';
+  }
+
+  function deviceRef(roomId) {
+    const fs = shared.fs;
+    return fs.mod.doc(fs.db, ALBUM_COLLECTION, roomId, 'devices', getDeviceId());
+  }
+
+  async function registerDevice() {
+    if (!shared.active || !shared.fs || !push.token) return;
+    const set = readPushSettings();
+    if (!set.enabled) return;
+    let tz = 'Asia/Seoul';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; } catch (e) {}
+    const mod = shared.fs.mod;
+    await mod.setDoc(deviceRef(shared.roomId), {
+      token: push.token,
+      platform: push.platform === 'android' ? 'android' : 'web',
+      enabled: true,
+      changeAlerts: set.changeAlerts,
+      annivAlerts: set.annivAlerts,
+      remindTime: set.remindTime,
+      tz: String(tz).slice(0, 64),
+      name: oneLine(profile.nickname).slice(0, MAX_AUTHOR),
+      updatedAt: mod.serverTimestamp()
+    }, { merge: true });
+    push.registeredRoom = shared.roomId;
+  }
+
+  function unregisterDevice(roomId) {
+    if (!shared.fs || !roomId) return Promise.resolve();
+    return shared.fs.mod.deleteDoc(deviceRef(roomId)).catch(() => {});
+  }
+
+  /* 설정에 맞춰 이 앨범에 기기를 등록하거나 지웁니다. interactive=true 이면 권한을 물어봅니다. */
+  async function syncPush(interactive) {
+    const set = readPushSettings();
+    if (!set.enabled) {
+      if (push.registeredRoom) await unregisterDevice(push.registeredRoom);
+      push.registeredRoom = '';
+      setPushStatus('', '');
+      return;
+    }
+    const kind = pushSupport();
+    if (kind === 'ios-browser') { setPushStatus('아이폰은 Safari 아래 공유(□↑) → 「홈 화면에 추가」로 연 앱에서 알림을 켤 수 있어요 (iOS 16.4 이상).', 'warn'); return; }
+    if (kind === 'app-old') { setPushStatus('이 앱 버전은 알림을 지원하지 않아요. 최신 사진첩 APK 로 업데이트해 주세요.', 'warn'); return; }
+    if (kind === 'app-no-fcm') { setPushStatus('이 앱은 아직 알림 설정(google-services.json) 없이 만들어졌어요. 알림이 들어간 새 APK 가 나오면 업데이트해 주세요.', 'warn'); return; }
+    if (kind === 'unsupported') { setPushStatus('이 브라우저는 푸시 알림을 지원하지 않아요.', 'warn'); return; }
+    if (!shared.active) { setPushStatus('알림은 함께 쓰는 앨범에서 받을 수 있어요. 위에서 공유 링크를 만들거나 받은 링크로 들어가 주세요.', ''); return; }
+    try {
+      if (!shared.fs) await loadFirestore();
+      const token = await obtainToken(interactive);
+      if (!token) {
+        setPushStatus('알림 권한이 꺼져 있어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요.', 'warn');
+        return;
+      }
+      push.token = token;
+      await registerDevice();
+      setPushStatus('이 기기에서 이 앨범 알림을 받고 있어요.', 'on');
+    } catch (err) {
+      console.warn('[push]', err);
+      setPushStatus(String((err && (err.code || err.message)) || '').indexOf('permission-denied') !== -1
+        ? '알림을 등록하지 못했어요. Firestore 규칙을 먼저 게시해야 해요.'
+        : '알림을 켜지 못했어요: ' + shareErrorMessage(err), 'warn');
+    }
+  }
+
+  function renderPushSettings() {
+    const set = readPushSettings();
+    el.pushToggle.checked = set.enabled;
+    el.pushChange.checked = set.changeAlerts;
+    el.pushAnniv.checked = set.annivAlerts;
+    syncInput(el.pushTime, set.remindTime);
+    el.pushChange.disabled = !set.enabled;
+    el.pushAnniv.disabled = !set.enabled;
+    el.pushTime.disabled = !set.enabled || !set.annivAlerts;
+    el.rowPushChange.classList.toggle('off', !set.enabled);
+    el.rowPushAnniv.classList.toggle('off', !set.enabled);
+    el.rowPushTime.classList.toggle('off', !set.enabled || !set.annivAlerts);
+    if (!set.enabled) setPushStatus('', '');
+  }
+
+  function updatePushSetting(patch, interactive) {
+    const next = Object.assign(readPushSettings(), patch);
+    savePushSettings(next);
+    renderPushSettings();
+    return syncPush(interactive);
+  }
+
   /* ---------------------------------------------------------------- 이벤트 */
   function bindEvents() {
     el.tabs.forEach((tab) => tab.addEventListener('click', () => setView(tab.getAttribute('data-view'))));
@@ -3596,6 +4073,18 @@
       if (event.key === 'Enter') { event.preventDefault(); joinSharedFromInput(); }
     });
 
+    /* ---- 설정: 기념일 ---- */
+    el.btnSaveSince.addEventListener('click', saveSinceFromForm);
+
+    /* ---- 설정: 알림 ---- */
+    el.pushToggle.addEventListener('change', () => updatePushSetting({ enabled: el.pushToggle.checked }, true));
+    el.pushChange.addEventListener('change', () => updatePushSetting({ changeAlerts: el.pushChange.checked }, false));
+    el.pushAnniv.addEventListener('change', () => updatePushSetting({ annivAlerts: el.pushAnniv.checked }, false));
+    el.pushTime.addEventListener('change', () => {
+      const v = String(el.pushTime.value || '');
+      if (/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) updatePushSetting({ remindTime: v }, false);
+    });
+
     /* ---- 설정: Cloudinary ---- */
     el.btnSaveCloud.addEventListener('click', saveCloudinaryFromForm);
     el.btnResetCloud.addEventListener('click', resetCloudinaryToDefault);
@@ -3616,6 +4105,7 @@
       const value = clampText(el.setNickname.value, MAX_AUTHOR);
       saveProfile(value);
       el.setNickname.value = profile.nickname;
+      if (push.registeredRoom) registerDevice().catch(() => {});
       renderSettings();
       toast(profile.nickname ? profile.nickname + '(으)로 남길게요.' : '닉네임을 비웠어요.');
     });

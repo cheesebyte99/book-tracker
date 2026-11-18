@@ -1,7 +1,7 @@
 {
   "name": "our-calendar-functions",
   "private": true,
-  "description": "우리들의 캘린더 — 일정 변경 알림·미리 알림 푸시",
+  "description": "우리들의 캘린더·우리 사진첩 — 변경 알림·미리 알림·기념일 푸시",
   "main": "index.js",
   "engines": { "node": "22" },
   "scripts": {
