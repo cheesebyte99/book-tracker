@@ -1,0 +1,63 @@
+name: Firebase 배포 (규칙·알림 서버)
+
+# main 에 firebase/ 쪽이 바뀌어 올라가면 Firestore 규칙과 Cloud Functions 를 배포한다.
+# Actions 탭에서 손으로 돌릴 수도 있다(Run workflow).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firebase/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/firebase-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 배포가 겹치지 않게 하나씩
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: firebase/functions/package-lock.json
+
+      - name: 서버 코드 설치·시험
+        working-directory: firebase/functions
+        run: |
+          npm ci
+          npm test
+
+      # 저장소 비밀값 FIREBASE_SERVICE_ACCOUNT (서비스 계정 키 JSON 전체)
+      - name: 서비스 계정 키 준비
+        id: key
+        env:
+          KEY_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$KEY_JSON" ]; then
+            echo "::warning::비밀값 FIREBASE_SERVICE_ACCOUNT 가 없어 배포를 건너뜁니다. README 의 「자동 배포」 를 보고 넣어 주세요."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s' "$KEY_JSON" > "$RUNNER_TEMP/firebase-key.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-key.json" >> "$GITHUB_ENV"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # --force 는 쓰지 않는다: 코드에서 빠진 함수를 지워야 하면 지우지 않고 멈춘다.
+      - name: 규칙·함수 배포
+        if: steps.key.outputs.ready == 'true'
+        run: npx --yes firebase-tools@15.35.0 deploy --only firestore:rules,functions --project jaeyeon-life --non-interactive
+
+      - name: 키 지우기
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-key.json"

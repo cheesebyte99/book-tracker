@@ -160,6 +160,20 @@ cd firebase/functions && npm install && npm test && cd ../..
 firebase deploy --only firestore:rules,functions   # firebase.json · .firebaserc 기준
 ```
 
+#### 🤖 자동 배포 (GitHub Actions)
+
+`main` 에 `firebase/`·`firebase.json`·`.firebaserc` 가 바뀌어 올라가면 `.github/workflows/firebase-deploy.yml` 이
+서버 시험(`npm test`) 뒤 `firebase deploy --only firestore:rules,functions` 를 대신 실행합니다. Actions 탭 → 「Firebase 배포」 → Run workflow 로 손으로도 돌릴 수 있어요.
+처음 한 번만 서비스 계정 키를 넣어 둡니다.
+
+1. [Google Cloud 콘솔 → IAM 및 관리자 → 서비스 계정](https://console.cloud.google.com/iam-admin/serviceaccounts?project=jaeyeon-life) → **서비스 계정 만들기** (이름 예: `github-deploy`).
+2. 역할 세 개를 줍니다: **편집자**, **Cloud Functions 관리자**, **서비스 계정 사용자**.
+3. 만든 계정 → **키** 탭 → 키 추가 → 새 키 만들기 → **JSON** → 파일이 내려받아집니다.
+4. GitHub 저장소 → Settings → Secrets and variables → Actions → **New repository secret**
+   이름 `FIREBASE_SERVICE_ACCOUNT`, 값에 그 JSON 파일 내용 **전체**를 붙여 넣고 저장. (내려받은 파일은 지워 두세요.)
+
+키가 없으면 워크플로는 경고만 남기고 배포를 건너뜁니다. 코드에서 함수가 빠져 지워야 하는 경우에는 지우지 않고 멈추므로, 그때는 직접 `firebase deploy` 로 확인합니다.
+
 > 이제 규칙은 콘솔 편집기 대신 CLI 로 배포하므로 한 줄 길이 제한을 신경 쓰지 않아도 됩니다.
 > 처음 2세대 함수를 배포할 때는 Eventarc 권한이 퍼지는 데 몇 분 걸려 한 번 실패할 수 있습니다(몇 분 뒤 다시 배포).
 
