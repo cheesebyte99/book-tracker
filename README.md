@@ -48,6 +48,8 @@
 | `calendar/index.html` | 우리들의 캘린더 앱 본체 (같은 저장소의 하위 경로로 배포) |
 | `calendar/manifest.webmanifest`, `calendar/icon*.png`, `calendar/icon.svg`, `calendar/apple-touch-icon.png` | 캘린더 홈 화면 아이콘·앱 정보 |
 | `android/` | 우리들의 캘린더 안드로이드 앱(APK) 프로젝트 |
+| `photo-album/` | 우리 사진첩 (데이트·기념일 공유 앨범) |
+| `android-photo-album/` | 우리 사진첩 안드로이드 앱(APK) 프로젝트 |
 | `firebase/functions/`, `firebase.json`, `.firebaserc` | 푸시 알림 서버(Cloud Functions)와 Firebase CLI 배포 설정 |
 | `firebase/firestore.rules` | Firestore 보안 규칙 (CLI 로 배포) |
 
@@ -160,6 +162,27 @@ firebase deploy --only firestore:rules,functions   # firebase.json · .firebaser
 
 > 이제 규칙은 콘솔 편집기 대신 CLI 로 배포하므로 한 줄 길이 제한을 신경 쓰지 않아도 됩니다.
 > 처음 2세대 함수를 배포할 때는 Eventarc 권한이 퍼지는 데 몇 분 걸려 한 번 실패할 수 있습니다(몇 분 뒤 다시 배포).
+
+## 📸 우리 사진첩 안드로이드 앱 (APK) — `android-photo-album/`
+
+`photo-album/` 폴더를 그대로 앱 안에 넣어 WebView 로 띄웁니다(웹과 앱이 같은 파일을 씀).
+페이지는 `https://cheesebyte99.github.io/book-tracker/photo-album/` 주소로 열리되 앱 안의 파일로 바로 응답하므로,
+인터넷 없이도 화면이 열리고 웹판과 같은 공유 앨범(방)·Cloudinary 설정을 그대로 씁니다.
+
+앱에서만 달라지는 점:
+- **⤓ 원본 저장** → 휴대폰 `사진/우리사진첩` 폴더에 바로 저장
+- 공유 링크 **복사** → 카카오톡 등으로 바로 보내는 공유 창
+- 받은 공유 링크를 누르거나 「공유 → 우리 사진첩」으로 보내면 그 앨범으로 바로 열림
+- 사진 여러 장 한 번에 고르기, 뒤로 가기로 창 닫기·타임라인으로 돌아가기
+
+```bash
+cd android-photo-album
+./gradlew assembleRelease   # app/build/outputs/apk/release/app-release.apk
+```
+
+GitHub Actions(`.github/workflows/photo-album-apk.yml`)가 `android-photo-album/`·`photo-album/` 변경 때마다 APK 를 만들어
+Actions 아티팩트(`our-photo-album-apk`)로 올리고, `main` 에서는 「우리 사진첩 APK」 릴리스로도 올립니다.
+서명 키는 캘린더 앱과 같은 방식(비밀값 `ANDROID_KEYSTORE_*`, 없으면 `debug.keystore`)입니다.
 
 ## 갱신 방법
 

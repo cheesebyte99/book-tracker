@@ -1,0 +1,68 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 웹 사진첩(저장소의 photo-album/)을 그대로 앱에 넣는다 — 웹과 앱이 같은 파일을 쓴다.
+def webAssetsDir = layout.buildDirectory.dir('generated/webassets')
+def copyAlbumWeb = tasks.register('copyAlbumWeb', Copy) {
+    from(rootProject.file('../photo-album'))
+    into(webAssetsDir.map { it.dir('www') })
+}
+
+// 서명: 환경 변수(CI 비밀값)가 있으면 그 키, 없으면 저장소의 debug.keystore 로 서명한다.
+def envKeystore = System.getenv('ANDROID_KEYSTORE_PATH')
+
+android {
+    namespace 'io.github.cheesebyte99.photoalbum'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.cheesebyte99.photoalbum'
+        minSdk 26
+        targetSdk 35
+        versionCode((project.findProperty('versionCode') ?: '1') as int)
+        versionName project.findProperty('versionName') ?: '1.0.0'
+    }
+
+    signingConfigs {
+        shared {
+            if (envKeystore) {
+                storeFile file(envKeystore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            } else {
+                storeFile rootProject.file('debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.shared
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
+    }
+
+    sourceSets {
+        main.assets.srcDirs += webAssetsDir.get().asFile
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+tasks.named('preBuild') { dependsOn copyAlbumWeb }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.13.1'
+}
