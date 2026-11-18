@@ -101,6 +101,10 @@ firebase deploy --only firestore:rules    # firebase-tools + 로그인이 되어
   입력칸은 16px 이라 아이폰이 입력할 때 화면을 확대하지 않고, 노치·홈 막대 여백(`safe-area-inset`)을 지킵니다.
 - **일정 글씨 크기**: 위쪽 「글씨 크기 100%」 버튼에서 달력 칸의 일정 글씨·막대 크기를 10%~100%(10% 단위, 기본 100%)로 고릅니다.
   작게 할수록 한 칸에 일정이 더 들어가며, 이 기기의 localStorage(`shared-calendar:chip-scale`)에만 저장됩니다.
+- **꾸미기 (⚙️ 설정)**: 테마 9가지(기본=휴대폰 라이트/다크 따라감 · 화이트 · 블랙 · 네이비 · 핑크 · 파랑 · 민트 · 라벤더 · 피치)와
+  배경 사진(긴 변 1600px JPEG 로 줄여 이 기기 IndexedDB `shared-calendar-ui` 에 저장) · 사진 투명도(0~90%).
+  모두 이 기기에만 저장되고(`shared-calendar:theme`, `shared-calendar:bg-alpha`) 친구 화면에는 영향이 없습니다.
+  안드로이드 앱은 테마에 맞춰 상태 막대 색도 바꿉니다(`AndroidApp.setSystemBars`).
 - **카테고리 편집**: 일정 창의 「✏️ 편집」에서 카테고리 이름·색을 바꾸고, 추가·삭제합니다.
   방마다 `rooms/{방ID}/categories/{id}` (`name`·`color`(#rrggbb)·`order`)에 저장되어 친구와 함께 씁니다.
   저장된 카테고리가 없으면 기본 4개(약속·여행·기념일·기타)를 씁니다. 지운 카테고리의 일정은 「미분류」(회색)로 보입니다.

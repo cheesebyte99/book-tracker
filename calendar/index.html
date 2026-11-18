@@ -12,6 +12,12 @@
 <meta name="format-detection" content="telephone=no">
 <title>우리들의 캘린더</title>
 <link rel="manifest" href="manifest.webmanifest">
+<script>
+  try {
+    var t0 = localStorage.getItem('shared-calendar:theme');
+    if (t0 && t0 !== 'auto') document.documentElement.setAttribute('data-theme', t0);
+  } catch (e) { /* 저장소를 못 쓰면 기본 테마 */ }
+</script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -29,6 +35,10 @@
     --primary: #4f46e5;
     --primary-ink: #4338ca;
     --primary-soft: #eef0ff;
+    --glow: 79, 70, 229;
+    --fab-a: #6366f1;
+    --fab-b: #4338ca;
+    --on-primary: #ffffff;
     --danger: #dc2626;
     --danger-soft: #fff1f1;
     --shadow: 0 10px 28px rgba(24, 28, 60, .09);
@@ -49,11 +59,23 @@
       --primary: #7c7cf8;
       --primary-ink: #a5a5ff;
       --primary-soft: #22263d;
+      --glow: 124, 124, 248;
+      --fab-a: #6366f1;
+      --fab-b: #4338ca;
       --danger: #f87171;
       --danger-soft: #2c1518;
       --shadow: 0 10px 28px rgba(0, 0, 0, .45);
     }
   }
+  /* ── 테마 (설정 → 꾸미기). 기본은 휴대폰의 라이트/다크를 따른다 ── */
+  html[data-theme="light"] { color-scheme: light; --bg: #f5f6fb; --bg-2: #eceef8; --surface: #ffffff; --surface-2: #f7f8fc; --text: #1b1d29; --muted: #6b7280; --faint: #b9bfcd; --line: #e8eaf1; --primary: #4f46e5; --primary-ink: #4338ca; --primary-soft: #eef0ff; --glow: 79, 70, 229; --fab-a: #6366f1; --fab-b: #4338ca; --on-primary: #ffffff; --danger: #dc2626; --danger-soft: #fff1f1; --shadow: 0 10px 28px rgba(24, 28, 60, .09); }
+  html[data-theme="black"] { color-scheme: dark; --bg: #000000; --bg-2: #0a0a0a; --surface: #111111; --surface-2: #1b1b1b; --text: #f5f5f5; --muted: #a3a3a3; --faint: #525252; --line: #262626; --primary: #e5e5e5; --primary-ink: #ffffff; --primary-soft: #262626; --glow: 255, 255, 255; --fab-a: #3f3f46; --fab-b: #18181b; --on-primary: #000000; --danger: #f87171; --danger-soft: #2c1518; --shadow: 0 10px 28px rgba(0, 0, 0, .45); }
+  html[data-theme="navy"] { color-scheme: dark; --bg: #0b1220; --bg-2: #0f172a; --surface: #111a2e; --surface-2: #18233b; --text: #e7eefc; --muted: #94a3c0; --faint: #4b5875; --line: #22304d; --primary: #60a5fa; --primary-ink: #93c5fd; --primary-soft: #16294a; --glow: 96, 165, 250; --fab-a: #3b82f6; --fab-b: #1e40af; --on-primary: #ffffff; --danger: #f87171; --danger-soft: #2c1518; --shadow: 0 10px 28px rgba(0, 0, 0, .45); }
+  html[data-theme="pink"] { color-scheme: light; --bg: #fff5f8; --bg-2: #ffe9f0; --surface: #ffffff; --surface-2: #fff0f5; --text: #3b1d2a; --muted: #8a6474; --faint: #d8b4c3; --line: #f6dbe5; --primary: #ec4899; --primary-ink: #be185d; --primary-soft: #fde7f1; --glow: 236, 72, 153; --fab-a: #f472b6; --fab-b: #db2777; --on-primary: #ffffff; --danger: #dc2626; --danger-soft: #fff1f1; --shadow: 0 10px 28px rgba(24, 28, 60, .09); }
+  html[data-theme="blue"] { color-scheme: light; --bg: #f2f7ff; --bg-2: #e3eeff; --surface: #ffffff; --surface-2: #f3f8ff; --text: #0f1d33; --muted: #5b6b85; --faint: #b3c2d9; --line: #dde7f5; --primary: #2563eb; --primary-ink: #1d4ed8; --primary-soft: #e3edff; --glow: 37, 99, 235; --fab-a: #3b82f6; --fab-b: #1d4ed8; --on-primary: #ffffff; --danger: #dc2626; --danger-soft: #fff1f1; --shadow: 0 10px 28px rgba(24, 28, 60, .09); }
+  html[data-theme="mint"] { color-scheme: light; --bg: #f1fbf8; --bg-2: #dff5ee; --surface: #ffffff; --surface-2: #f0faf7; --text: #10302a; --muted: #5a7a72; --faint: #a9cfc5; --line: #d6efe8; --primary: #0d9488; --primary-ink: #0f766e; --primary-soft: #d9f5ee; --glow: 13, 148, 136; --fab-a: #14b8a6; --fab-b: #0f766e; --on-primary: #ffffff; --danger: #dc2626; --danger-soft: #fff1f1; --shadow: 0 10px 28px rgba(24, 28, 60, .09); }
+  html[data-theme="lavender"] { color-scheme: light; --bg: #f8f5ff; --bg-2: #efe8ff; --surface: #ffffff; --surface-2: #f7f3ff; --text: #261a3d; --muted: #75688f; --faint: #c9bde0; --line: #e9e1f7; --primary: #8b5cf6; --primary-ink: #6d28d9; --primary-soft: #efe7ff; --glow: 139, 92, 246; --fab-a: #a78bfa; --fab-b: #7c3aed; --on-primary: #ffffff; --danger: #dc2626; --danger-soft: #fff1f1; --shadow: 0 10px 28px rgba(24, 28, 60, .09); }
+  html[data-theme="peach"] { color-scheme: light; --bg: #fff7f2; --bg-2: #ffeadd; --surface: #ffffff; --surface-2: #fff4ed; --text: #3a2116; --muted: #8a6a5c; --faint: #e0c1b2; --line: #f7e0d3; --primary: #f97316; --primary-ink: #c2410c; --primary-soft: #ffeddf; --glow: 249, 115, 22; --fab-a: #fb923c; --fab-b: #ea580c; --on-primary: #ffffff; --danger: #dc2626; --danger-soft: #fff1f1; --shadow: 0 10px 28px rgba(24, 28, 60, .09); }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; }
   body {
@@ -70,7 +92,7 @@
     content: "";
     position: fixed;
     inset: 0;
-    background: linear-gradient(180deg, rgba(79, 70, 229, .16), rgba(79, 70, 229, 0) 240px);
+    background: linear-gradient(180deg, rgba(var(--glow), .16), rgba(var(--glow), 0) 240px);
     pointer-events: none;
     z-index: 0;
   }
@@ -170,7 +192,7 @@
   .day-cell.outside .num { color: var(--faint); }
   .day-cell.sun:not(.outside) .num { color: var(--sun); }
   .day-cell.sat:not(.outside) .num { color: var(--sat); }
-  .day-cell.today .num { background: var(--primary); color: #fff; font-weight: 800; }
+  .day-cell.today .num { background: var(--primary); color: var(--on-primary); font-weight: 800; }
   .day-cell.selected { background: var(--primary-soft); }
   .day-cell .more {
     position: absolute; left: 0; right: 0; bottom: 2px; text-align: center;
@@ -236,8 +258,8 @@
     bottom: calc(18px + env(safe-area-inset-bottom));
     width: 58px; height: 58px; border-radius: 50%; border: 0;
     font-size: 30px; font-weight: 400; line-height: 1; color: #fff; padding: 0 0 3px;
-    background: linear-gradient(135deg, #6366f1, #4338ca);
-    box-shadow: 0 10px 24px rgba(79, 70, 229, .45);
+    background: linear-gradient(135deg, var(--fab-a), var(--fab-b));
+    box-shadow: 0 10px 24px rgba(var(--glow), .45);
   }
   .fab:active { transform: scale(.95); }
 
@@ -269,6 +291,53 @@
     border-radius: 12px; padding: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer;
   }
   .color-opt.edit { border-style: dashed; color: var(--muted); }
+
+  /* ── 배경 사진 ── */
+  .bg-photo {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-position: center; background-size: cover; background-repeat: no-repeat;
+    opacity: 0; transition: opacity .2s ease;
+  }
+  .bg-photo[hidden] { display: none; }
+  body.has-photo::before { display: none; }
+  /* 사진 위에서도 날짜·요일이 읽히도록 살짝 테두리 그림자 */
+  body.has-photo .day-cell .num, body.has-photo .weekdays span, body.has-photo .month-nav h2 {
+    text-shadow: 0 0 3px var(--bg), 0 0 6px var(--bg);
+  }
+  body.has-photo .day-cell.today .num { text-shadow: none; }
+
+  /* ── 꾸미기 ── */
+  .theme-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
+  .theme-opt {
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
+    border-radius: 14px; padding: 8px 4px 7px; cursor: pointer; font-size: 12px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+  }
+  .theme-opt.active { border-color: var(--primary); box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .theme-sw {
+    width: 34px; height: 34px; border-radius: 50%; position: relative; overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .12);
+  }
+  .theme-sw::after {
+    content: ""; position: absolute; right: 3px; bottom: 3px; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--sw-accent); box-shadow: 0 0 0 2px var(--sw-bg);
+  }
+  .photo-row { display: flex; align-items: center; gap: 10px; padding: 10px 0 4px; }
+  .photo-thumb {
+    flex: 0 0 auto; width: 54px; height: 54px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface-2) center / cover no-repeat; display: grid; place-items: center;
+    color: var(--faint); font-size: 22px;
+  }
+  .photo-main { flex: 1; min-width: 0; }
+  .photo-title { display: block; font-size: 14.5px; font-weight: 700; }
+  .photo-sub { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .photo-btns { display: flex; gap: 6px; margin-top: 7px; }
+  .photo-btns .btn-ghost, .photo-btns .btn-danger { padding: 8px 12px; font-size: 13px; white-space: nowrap; }
+  .photo-thumb { width: 64px; height: 64px; }
+  .alpha-row { display: flex; align-items: center; gap: 10px; padding: 6px 0 10px; }
+  .alpha-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--primary); height: 32px; }
+  .alpha-row .val { flex: 0 0 auto; min-width: 46px; text-align: right; font-weight: 800; font-size: 14px; }
+  .alpha-row .lbl { flex: 0 0 auto; font-size: 13px; font-weight: 700; color: var(--muted); }
 
   /* ── 설정 ── */
   .icon-only-btn {
@@ -394,7 +463,7 @@
   .sheet-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
   .spacer { flex: 1; }
   .btn-primary {
-    border: 0; background: var(--primary); color: #fff; border-radius: 12px;
+    border: 0; background: var(--primary); color: var(--on-primary); border-radius: 12px;
     padding: 12px 20px; font-size: 14.5px; font-weight: 800; cursor: pointer;
   }
   .btn-primary:disabled { opacity: .6; }
@@ -427,6 +496,7 @@
 </style>
 </head>
 <body>
+<div id="bgPhoto" class="bg-photo" hidden aria-hidden="true"></div>
 <noscript>
   <p style="padding:16px;font-size:14px">이 캘린더는 JavaScript가 필요합니다. 브라우저 설정에서 JavaScript를 켜고 다시 열어 주세요.</p>
 </noscript>
@@ -569,7 +639,26 @@
       <span><span class="lbl">일정 추가·수정·삭제 알림</span><span class="sub">친구가 일정을 바꾸면 바로 알려요</span></span>
       <input id="changeToggle" class="switch" type="checkbox" checked>
     </label>
-    <div class="set-section" style="margin-top:14px">기타</div>
+    <div class="set-section" style="margin-top:14px">🎨 꾸미기</div>
+    <div id="themeGrid" class="theme-grid" role="group" aria-label="테마"></div>
+    <div class="photo-row">
+      <div id="photoThumb" class="photo-thumb" aria-hidden="true">🖼️</div>
+      <div class="photo-main">
+        <span class="photo-title">배경 사진</span>
+        <span class="photo-sub" id="photoSub">달력 뒤에 사진을 깔아요</span>
+        <div class="photo-btns">
+          <button id="photoPickBtn" class="btn-ghost" type="button">사진 고르기</button>
+          <button id="photoClearBtn" class="btn-danger" type="button" hidden>지우기</button>
+        </div>
+      </div>
+      <input id="photoInput" type="file" accept="image/*" hidden>
+    </div>
+    <div class="alpha-row">
+      <span class="lbl">사진 투명도</span>
+      <input id="photoAlpha" type="range" min="0" max="90" step="10" value="50" aria-label="배경 사진 투명도 (퍼센트)">
+      <span id="photoAlphaVal" class="val">50%</span>
+    </div>
+    <div class="set-section" style="margin-top:6px">기타</div>
     <label class="set-row">
       <span><span class="lbl">내 이름</span><span class="sub">알림에 「○○님이 추가했어요」로 보여요</span></span>
       <input id="myNameInput" type="text" maxlength="20" placeholder="이름" autocomplete="nickname">
@@ -693,6 +782,20 @@
   // Firebase 콘솔 → 프로젝트 설정 → 클라우드 메시징 → 웹 푸시 인증서의 「키 쌍」(공개 키)
   var VAPID_KEY = 'BA6nKAfzBNESVi8eF5TW9RFwG5uU0RsJMscXyXNLe5SmN49g78AL7CJc31cO9sEggTQAo_2baLhU01x-Wx-humU';
   var DEFAULT_REMINDERS = [0, 1, 2];
+  var THEME_KEY = 'shared-calendar:theme';
+  var PHOTO_ALPHA_KEY = 'shared-calendar:bg-alpha';
+  var PHOTO_DB = 'shared-calendar-ui';
+  var THEMES = [
+    { key: 'auto', label: '기본', bg: '#f5f6fb', bg2: '#0e1016', accent: '#7c7cf8' },
+    { key: 'light', label: '화이트', bg: '#f5f6fb', accent: '#4f46e5' },
+    { key: 'black', label: '블랙', bg: '#000000', accent: '#e5e5e5' },
+    { key: 'navy', label: '네이비', bg: '#0b1220', accent: '#60a5fa' },
+    { key: 'pink', label: '핑크', bg: '#fff5f8', accent: '#ec4899' },
+    { key: 'blue', label: '파랑', bg: '#f2f7ff', accent: '#2563eb' },
+    { key: 'mint', label: '민트', bg: '#f1fbf8', accent: '#0d9488' },
+    { key: 'lavender', label: '라벤더', bg: '#f8f5ff', accent: '#8b5cf6' },
+    { key: 'peach', label: '피치', bg: '#fff7f2', accent: '#f97316' }
+  ];
   var REMIND_OPTIONS = [
     { days: 0, label: '당일' }, { days: 1, label: '1일 전' }, { days: 2, label: '2일 전' },
     { days: 3, label: '3일 전' }, { days: 7, label: '1주 전' }
@@ -1239,6 +1342,177 @@
     el.remindTimeInput.disabled = !next.enabled;
     el.changeToggle.disabled = !next.enabled;
     return syncPush(interactive);
+  }
+
+  /* ── 테마 ── */
+  function readTheme() {
+    var t = 'auto';
+    try { t = window.localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) { t = 'auto'; }
+    for (var i = 0; i < THEMES.length; i++) if (THEMES[i].key === t) return t;
+    return 'auto';
+  }
+
+  function cssColorToHex(c) {
+    var m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c || '');
+    if (!m) return '#f5f6fb';
+    return '#' + [m[1], m[2], m[3]].map(function (n) { return ('0' + Number(n).toString(16)).slice(-2); }).join('');
+  }
+
+  function isLightHex(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return (r * 299 + g * 587 + b * 114) / 1000 > 140;
+  }
+
+  /* 상태 막대(웹: theme-color, 안드로이드 앱: 막대 색·아이콘 밝기)를 지금 배경색에 맞춘다 */
+  function syncSystemBars() {
+    var hex = cssColorToHex(getComputedStyle(document.body).backgroundColor);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', hex);
+    if (window.AndroidApp && typeof window.AndroidApp.setSystemBars === 'function') {
+      try { window.AndroidApp.setSystemBars(hex, isLightHex(hex)); } catch (e) { /* 예전 앱 */ }
+    }
+  }
+
+  function applyTheme(key, save) {
+    if (key === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', key);
+    if (save) {
+      try { window.localStorage.setItem(THEME_KEY, key); } catch (e) { /* 무시 */ }
+    }
+    if (el.themeGrid) {
+      var opts = el.themeGrid.querySelectorAll('.theme-opt');
+      for (var i = 0; i < opts.length; i++) {
+        var on = opts[i].getAttribute('data-theme') === key;
+        opts[i].classList.toggle('active', on);
+        opts[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
+    syncSystemBars();
+  }
+
+  function buildThemeGrid() {
+    el.themeGrid.innerHTML = '';
+    THEMES.forEach(function (t) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'theme-opt';
+      b.setAttribute('data-theme', t.key);
+      var sw = document.createElement('span');
+      sw.className = 'theme-sw';
+      // 기본(자동)은 밝은/어두운 반반으로 보여 준다
+      sw.style.background = t.bg2 ? 'linear-gradient(135deg, ' + t.bg + ' 50%, ' + t.bg2 + ' 50%)' : t.bg;
+      sw.style.setProperty('--sw-accent', t.accent);
+      sw.style.setProperty('--sw-bg', t.bg);
+      var name = document.createElement('span');
+      name.textContent = t.label;
+      b.appendChild(sw);
+      b.appendChild(name);
+      el.themeGrid.appendChild(b);
+    });
+  }
+
+  /* ── 배경 사진 (이 기기의 IndexedDB 에만) ── */
+  function photoDb() {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) { reject(new Error('IndexedDB 없음')); return; }
+      var req = window.indexedDB.open(PHOTO_DB, 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore('kv'); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  function photoGet() {
+    return photoDb().then(function (db) {
+      return new Promise(function (resolve) {
+        var r = db.transaction('kv', 'readonly').objectStore('kv').get('bgPhoto');
+        r.onsuccess = function () { resolve(r.result || ''); };
+        r.onerror = function () { resolve(''); };
+      });
+    }).catch(function () { return ''; });
+  }
+
+  function photoPut(value) {
+    return photoDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('kv', 'readwrite');
+        if (value) tx.objectStore('kv').put(value, 'bgPhoto'); else tx.objectStore('kv').delete('bgPhoto');
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function readPhotoAlpha() {
+    var v = 50;
+    try { v = parseInt(window.localStorage.getItem(PHOTO_ALPHA_KEY) || '50', 10); } catch (e) { v = 50; }
+    if (!(v >= 0 && v <= 90)) v = 50;
+    return Math.round(v / 10) * 10;
+  }
+
+  var photoUrl = '';
+
+  function applyPhoto(url, alpha) {
+    photoUrl = url || '';
+    var has = !!photoUrl;
+    el.bgPhoto.hidden = !has;
+    el.bgPhoto.style.backgroundImage = has ? 'url("' + photoUrl + '")' : '';
+    el.bgPhoto.style.opacity = has ? String((100 - alpha) / 100) : '0';
+    document.body.classList.toggle('has-photo', has);
+    if (el.photoThumb) {
+      el.photoThumb.style.backgroundImage = has ? 'url("' + photoUrl + '")' : '';
+      el.photoThumb.textContent = has ? '' : '🖼️';
+      el.photoClearBtn.hidden = !has;
+      el.photoPickBtn.textContent = has ? '바꾸기' : '사진 고르기';
+      el.photoAlpha.disabled = !has;
+      el.photoAlpha.value = String(alpha);
+      el.photoAlphaVal.textContent = alpha + '%';
+      el.photoSub.textContent = has ? '투명도를 올리면 사진이 흐려져요' : '달력 뒤에 사진을 깔아요';
+    }
+  }
+
+  /* 고른 사진을 긴 변 1600px JPEG 로 줄인다 */
+  function shrinkPhoto(file) {
+    var MAX = 1600;
+    function draw(src, w, h) {
+      var k = Math.min(1, MAX / Math.max(w, h));
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * k));
+      c.height = Math.max(1, Math.round(h * k));
+      c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.85);
+    }
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        try { resolve(draw(img, img.naturalWidth, img.naturalHeight)); } catch (e) { reject(e); }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('사진을 열지 못했어요')); };
+      img.src = url;
+    });
+  }
+
+  async function handlePhotoFile() {
+    var file = el.photoInput.files && el.photoInput.files[0];
+    el.photoInput.value = '';
+    if (!file) return;
+    try {
+      el.photoPickBtn.disabled = true;
+      el.photoPickBtn.textContent = '넣는 중…';
+      var data = await shrinkPhoto(file);
+      await photoPut(data);
+      applyPhoto(data, readPhotoAlpha());
+      toast('배경 사진을 넣었어요');
+    } catch (err) {
+      console.warn('[photo]', err);
+      toast('사진을 넣지 못했어요' + (err && err.message ? ': ' + err.message : ''));
+      applyPhoto(photoUrl, readPhotoAlpha());
+    } finally {
+      el.photoPickBtn.disabled = false;
+    }
   }
 
   /* ── 일정 알림 고르기 ── */
@@ -2366,6 +2640,15 @@
     el.myNameInput = document.getElementById('myNameInput');
     el.settingsTextBtn = document.getElementById('settingsTextBtn');
     el.remindPicker = document.getElementById('remindPicker');
+    el.bgPhoto = document.getElementById('bgPhoto');
+    el.themeGrid = document.getElementById('themeGrid');
+    el.photoThumb = document.getElementById('photoThumb');
+    el.photoSub = document.getElementById('photoSub');
+    el.photoPickBtn = document.getElementById('photoPickBtn');
+    el.photoClearBtn = document.getElementById('photoClearBtn');
+    el.photoInput = document.getElementById('photoInput');
+    el.photoAlpha = document.getElementById('photoAlpha');
+    el.photoAlphaVal = document.getElementById('photoAlphaVal');
     el.textModal = document.getElementById('textModal');
     el.scaleValue = document.getElementById('scaleValue');
     el.scaleRange = document.getElementById('scaleRange');
@@ -2429,6 +2712,27 @@
     el.catAddBtn.addEventListener('click', addCatDraft);
     el.textSizeBtn.addEventListener('click', openTextModal);
     el.settingsBtn.addEventListener('click', openSettings);
+    el.themeGrid.addEventListener('click', function (e) {
+      var opt = e.target.closest ? e.target.closest('.theme-opt') : null;
+      if (opt) applyTheme(opt.getAttribute('data-theme'), true);
+    });
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var onScheme = function () { if (readTheme() === 'auto') syncSystemBars(); };
+      if (mq.addEventListener) mq.addEventListener('change', onScheme); else if (mq.addListener) mq.addListener(onScheme);
+    }
+    el.photoPickBtn.addEventListener('click', function () { el.photoInput.click(); });
+    el.photoInput.addEventListener('change', handlePhotoFile);
+    el.photoClearBtn.addEventListener('click', function () {
+      photoPut('').catch(function () {});
+      applyPhoto('', readPhotoAlpha());
+      toast('배경 사진을 지웠어요');
+    });
+    el.photoAlpha.addEventListener('input', function () {
+      var v = Math.round(Number(el.photoAlpha.value) / 10) * 10;
+      try { window.localStorage.setItem(PHOTO_ALPHA_KEY, String(v)); } catch (e) { /* 무시 */ }
+      applyPhoto(photoUrl, v);
+    });
     el.settingsTextBtn.addEventListener('click', openTextModal);
     el.pushToggle.addEventListener('change', function () {
       // 권한을 못 받아도 스위치는 켠 채로 두고, 아래 안내 문구로 이유를 알려 준다
@@ -2540,7 +2844,11 @@
     if (canNativeShare()) el.copyLinkBtn.textContent = '📤 친구 초대';
     buildColorPicker();
     buildRemindPicker();
+    buildThemeGrid();
     bindEvents();
+    applyTheme(readTheme(), false);
+    applyPhoto('', readPhotoAlpha());
+    photoGet().then(function (data) { if (data) applyPhoto(data, readPhotoAlpha()); });
 
     var openDate = '';
     try { openDate = new URL(location.href).searchParams.get('date') || ''; } catch (e) { openDate = ''; }

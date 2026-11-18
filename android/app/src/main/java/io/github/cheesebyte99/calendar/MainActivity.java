@@ -8,12 +8,15 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -27,6 +30,7 @@ import androidx.annotation.NonNull;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import java.io.IOException;
@@ -52,6 +56,11 @@ public class MainActivity extends Activity {
     private static final Pattern ROOM_IN_TEXT = Pattern.compile("[?&]room=([A-Za-z0-9-]{1,32})");
 
     private WebView webView;
+    private FrameLayout root;
+    /** 배경 사진 고르기(<input type=file>) 결과를 웹에 돌려줄 통로 */
+    private ValueCallback<Uri[]> fileCallback;
+    private static final int REQ_FILE = 8;
+    private static final String UI_PREFS = "ui";
     private WebViewAssetLoader assetLoader;
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -60,7 +69,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         // WebView 는 자기 padding 을 무시하고 화면 끝까지 그리므로, 바깥 틀에 여백을 준다.
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setBackgroundColor(getColor(R.color.app_bg));
         webView = new WebView(this);
         webView.setBackgroundColor(getColor(R.color.app_bg));
@@ -84,7 +93,10 @@ public class MainActivity extends Activity {
                 .build();
 
         webView.addJavascriptInterface(new Bridge(), "AndroidApp");
-        webView.setWebChromeClient(new WebChromeClient()); // confirm()/prompt() 대화상자
+        webView.setWebChromeClient(new CalendarChrome()); // confirm()/prompt() 대화상자, 사진 고르기
+        // 지난번 테마의 막대 색으로 바로 시작(깜빡임 줄이기)
+        SharedPreferences ui = getSharedPreferences(UI_PREFS, MODE_PRIVATE);
+        if (ui.contains("barColor")) applySystemBars(ui.getInt("barColor", 0), ui.getBoolean("barLight", true));
         webView.setWebViewClient(new CalendarClient());
 
         Push.createChannel(this);
@@ -106,6 +118,44 @@ public class MainActivity extends Activity {
         String room = roomFromIntent(intent);
         if (room != null) {
             webView.loadUrl(urlFor(room, dateFromIntent(intent)));
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_FILE || fileCallback == null) return;
+        fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+        fileCallback = null;
+    }
+
+    /** 테마에 맞춰 상태 막대·내비게이션 막대 자리의 색과 아이콘 밝기를 바꾼다 */
+    private void applySystemBars(int color, boolean light) {
+        root.setBackgroundColor(color);
+        webView.setBackgroundColor(color);
+        WindowInsetsControllerCompat c = new WindowInsetsControllerCompat(getWindow(), root);
+        c.setAppearanceLightStatusBars(light);
+        c.setAppearanceLightNavigationBars(light);
+        if (Build.VERSION.SDK_INT < 35) {
+            getWindow().setStatusBarColor(color);
+            getWindow().setNavigationBarColor(color);
+        }
+    }
+
+    private final class CalendarChrome extends WebChromeClient {
+        @Override
+        public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+            if (fileCallback != null) fileCallback.onReceiveValue(null);
+            fileCallback = callback;
+            try {
+                Intent pick = new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
+                startActivityForResult(Intent.createChooser(pick, "사진 고르기"), REQ_FILE);
+                return true;
+            } catch (ActivityNotFoundException e) {
+                fileCallback = null;
+                return false;
+            }
         }
     }
 
@@ -340,6 +390,22 @@ public class MainActivity extends Activity {
                 send.setType("text/plain");
                 send.putExtra(Intent.EXTRA_TEXT, text);
                 startActivity(Intent.createChooser(send, getString(R.string.share_title)));
+            });
+        }
+
+        /** 테마 배경색(#rrggbb)과 밝은 배경인지 — 상태 막대 색을 맞춘다 */
+        @JavascriptInterface
+        public void setSystemBars(String hex, boolean light) {
+            final int color;
+            try {
+                color = Color.parseColor(hex);
+            } catch (IllegalArgumentException e) {
+                return;
+            }
+            runOnUiThread(() -> {
+                applySystemBars(color, light);
+                getSharedPreferences(UI_PREFS, MODE_PRIVATE).edit()
+                        .putInt("barColor", color).putBoolean("barLight", light).apply();
             });
         }
 
