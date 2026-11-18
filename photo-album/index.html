@@ -534,6 +534,7 @@
   .empty .emo { font-size: 42px; line-height: 1; }
   .empty h3 { margin: 14px 0 6px; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
   .empty p { margin: 0 0 20px; font-size: 13.5px; color: var(--ink-3); line-height: 1.65; }
+  .empty p.empty-hint { margin: 10px 0 0; font-size: 12px; }
 
   /* ---------- 버튼 / 입력 ---------- */
   .btn {
@@ -2862,11 +2863,15 @@
   }
 
   function emptyStateHtml() {
+    const join = shared.active ? '' :
+      '<button type="button" class="btn sm" data-act="join-shared" style="margin-top:10px">받은 공유 링크로 들어가기</button>' +
+      '<p class="empty-hint">이미 함께 쓰는 앨범이 있다면, 받은 링크를 붙여 넣으면 돼요.</p>';
     return '<div class="empty">' +
       '<div class="emo">🌷</div>' +
       '<h3>아직 담긴 추억이 없어요</h3>' +
       '<p>사진을 고르면 찍은 날짜를 읽어<br>그날의 추억으로 모아 드려요.</p>' +
       '<button type="button" class="btn primary" data-act="new-day">첫 추억 담기</button>' +
+      join +
       '</div>';
   }
 
@@ -3469,6 +3474,11 @@
           return;
         }
         if (name === 'open-settings') { setView('settings'); return; }
+        if (name === 'join-shared') {
+          setView('settings');
+          try { el.joinRoom.focus(); } catch (e) {}
+          return;
+        }
       }
       const thumb = event.target.closest('[data-photo-id]');
       if (thumb) {
